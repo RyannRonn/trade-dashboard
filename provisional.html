@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>수출입 잠정치 트래킹</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&family=Fira+Code:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#05080e;--bg2:#0b1018;--bg3:#121a28;--bg4:#192236;--bd:#1a2436;--t1:#e6ecf6;--t2:#a4b2c8;--t3:#687891;--t4:#3c4b62;--bl:#4d9fff;--gn:#34d399;--rd:#ef5f5f;--am:#e8a830;--pr:#a78bfa;--cy:#22d3ee;--pk:#f472b6;--bl-g:rgba(77,159,255,.08);--gn-g:rgba(52,211,153,.08);--rd-g:rgba(239,95,95,.08)}
+body{font-family:"Noto Sans KR",sans-serif;background:var(--bg);color:var(--t1);min-height:100vh}
+.mono{font-family:"Fira Code",monospace}
+.hdr{background:linear-gradient(135deg,#080d16,#0f1724,#080d16);border-bottom:1px solid var(--bd);padding:14px 24px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+.hdr h1{font-size:18px;font-weight:900}.hdr h1 em{font-style:normal;background:linear-gradient(90deg,var(--am),var(--rd));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.hdr .sub{font-size:9.5px;color:var(--t4);margin-top:1px;font-family:"Fira Code"}
+.hdr-r{display:flex;align-items:center;gap:8px}
+.abg{padding:3px 10px;background:rgba(232,168,48,.08);border:1px solid rgba(232,168,48,.22);border-radius:16px;font-size:9.5px;color:var(--am);font-family:"Fira Code";display:flex;align-items:center;gap:5px}
+.abg::before{content:"";width:5px;height:5px;border-radius:50%;background:var(--am);animation:bk 2s ease infinite}
+@keyframes bk{0%,100%{opacity:1}50%{opacity:.2}}
+
+.kbar{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:7px;padding:10px 24px}
+.kpi{background:var(--bg2);border:1px solid var(--bd);border-radius:8px;padding:10px 12px;cursor:pointer;transition:all .12s;position:relative;overflow:hidden}
+.kpi:hover{border-color:var(--bl);transform:translateY(-1px)}
+.kpi.on{border-color:var(--bl);background:var(--bl-g)}
+.kpi .kl{font-size:9.5px;color:var(--t3);font-weight:500;letter-spacing:.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi .kv{font-family:"Fira Code";font-size:17px;font-weight:700;margin:2px 0 1px}
+.kpi .kc{font-family:"Fira Code";font-size:9.5px;display:flex;gap:6px}
+
+.tw{padding:0 24px;border-bottom:1px solid var(--bd)}.tabs{display:flex;gap:1px;overflow-x:auto;scrollbar-width:none}.tabs::-webkit-scrollbar{display:none}
+.tab{padding:8px 15px;border:none;background:transparent;color:var(--t3);font-family:"Noto Sans KR";font-size:12px;font-weight:600;cursor:pointer;transition:all .1s;white-space:nowrap;border-bottom:2px solid transparent}
+.tab:hover{color:var(--t2)}.tab.on{color:var(--bl);border-bottom-color:var(--bl)}
+
+.cnt{padding:16px 24px;min-height:55vh}
+.st{font-size:13px;font-weight:700;margin:16px 0 10px;display:flex;align-items:center;gap:7px}
+.st .d{width:3px;height:14px;border-radius:2px;background:var(--bl)}
+.cg{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+@media(max-width:768px){.cg{grid-template-columns:1fr}}
+.cb{background:var(--bg2);border:1px solid var(--bd);border-radius:8px;padding:13px}
+.cb.w{grid-column:1/-1}.cb h4{font-size:11px;font-weight:700;color:var(--t2);margin-bottom:10px}
+.cb canvas{max-height:280px}
+
+.pills{display:flex;gap:4px;margin-bottom:12px;flex-wrap:wrap;justify-content:center}
+.pill{padding:5px 14px;border:1px solid var(--bd);border-radius:20px;background:transparent;color:var(--t3);font-size:11px;font-weight:500;cursor:pointer;transition:all .1s;font-family:"Noto Sans KR"}
+.pill:hover{border-color:var(--t3)}.pill.on{border-color:var(--bl);color:var(--bl);background:var(--bl-g)}
+
+.ts{overflow-x:auto;margin-bottom:14px}
+table.dt{width:100%;border-collapse:collapse;font-size:11px}
+table.dt th{padding:7px 8px;text-align:right;font-weight:600;color:var(--t4);border-bottom:2px solid var(--bd);font-size:9.5px;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap}
+table.dt th:first-child{text-align:center;width:32px}table.dt th:nth-child(2){text-align:left}
+table.dt td{padding:5px 8px;text-align:right;font-family:"Fira Code";font-size:11px;border-bottom:1px solid rgba(26,36,54,.6);color:var(--t2)}
+table.dt td:first-child{text-align:center;color:var(--t4);font-weight:700;width:32px}
+table.dt td:nth-child(2){text-align:left;font-family:"Noto Sans KR";font-weight:500;color:var(--t1)}
+table.dt tr:hover{background:rgba(255,255,255,.015)}
+table.dt tr.ck{cursor:pointer}table.dt tr.ck:hover{background:rgba(77,159,255,.04)}
+
+.up{color:var(--gn)}.dn{color:var(--rd)}.nt{color:var(--t4)}
+.bg{display:inline-flex;padding:1px 5px;border-radius:3px;font-size:9.5px;font-weight:600;font-family:"Fira Code"}
+.bg.up{color:var(--gn);background:var(--gn-g)}.bg.dn{color:var(--rd);background:var(--rd-g)}.bg.nt{color:var(--t4)}
+
+.bar-c{position:relative}.bar-b{position:absolute;top:2px;bottom:2px;left:0;border-radius:3px;opacity:.15}
+
+.bbtn{padding:5px 12px;border:1px solid var(--bd);border-radius:6px;background:var(--bg2);color:var(--t2);font-size:12px;font-weight:600;cursor:pointer;font-family:"Noto Sans KR";transition:all .1s}
+.bbtn:hover{border-color:var(--bl);color:var(--bl)}
+
+.ftr{padding:12px 24px;border-top:1px solid var(--bd);font-size:9px;color:var(--t4);display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px}
+
+/* Period badge colors */
+.p10{color:var(--cy);background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.2)}
+.p20{color:var(--am);background:rgba(232,168,48,.08);border:1px solid rgba(232,168,48,.2)}
+.p30{color:var(--gn);background:rgba(52,211,153,.08);border:1px solid rgba(52,211,153,.2)}
+.pbadge{display:inline-flex;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;font-family:"Fira Code"}
+
+/* Section selector */
+.sec-sel{display:flex;gap:4px;margin-bottom:12px;flex-wrap:wrap}
+.sec-btn{padding:4px 10px;border:1px solid var(--bd);border-radius:6px;background:transparent;color:var(--t3);font-size:10px;cursor:pointer;transition:all .1s;font-family:"Noto Sans KR"}
+.sec-btn:hover{border-color:var(--t3)}.sec-btn.on{border-color:var(--cy);color:var(--cy);background:rgba(34,211,238,.06)}
+
+.link-btn{padding:4px 10px;border:1px solid var(--bd);border-radius:6px;background:transparent;color:var(--t3);font-size:10px;text-decoration:none;font-family:"Noto Sans KR";transition:all .1s}
+.link-btn:hover{border-color:var(--bl);color:var(--bl)}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+<div>
+  <h1>🇰🇷 <em>수출입 잠정치</em> 트래킹</h1>
+  <div class="sub">TRASS 무역통계 · 10일/20일/30일 누적 비교 · <span id="dt"></span></div>
+</div>
+<div class="hdr-r">
+  <a href="trade.html" class="link-btn">📊 확정치</a>
+  <div class="abg">잠정치</div>
+</div>
+</div>
+
+<div class="kbar" id="kpi"></div>
+<div class="tw"><div class="tabs" id="tabs"></div></div>
+<div class="cnt" id="main"></div>
+<div class="ftr"><span>💡 Source: 관세청 무역통계정보시스템 (TRASS) · 금액: 천 USD · 잠정치 (확정 전 데이터)</span><span>Auto-collected by Clevis 🔧</span></div>
+
+<script>
+// ===== DATA (loaded from file or embedded) =====
+let PD = null; // provisional data
+let BD = null; // business days
+
+// State
+let tab = "overview";
+let selSheet = null;
+let selSection = "전세계";
+let periodFilter = "all"; // "all", "10", "20", "30"
+let timeRange = "1y"; // "all", "1y", "6m"
+let charts = [];
+
+Chart.defaults.color="#a4b2c8";Chart.defaults.borderColor="rgba(26,36,54,.5)";
+Chart.defaults.font.family="'Fira Code',monospace";Chart.defaults.font.size=10;
+
+const CL=["#4d9fff","#ef5f5f","#e8a830","#a78bfa","#22d3ee","#f472b6","#34d399","#a3e635","#fb923c","#6366f1","#14b8a6","#f43f5e","#eab308","#8b5cf6","#06b6d4","#ec4899","#84cc16","#f97316","#3b82f6","#ef4444"];
+const PCOL = {"10":"#22d3ee","20":"#e8a830","30":"#34d399"};
+const PBGCOL = {"10":"rgba(34,211,238,.3)","20":"rgba(232,168,48,.3)","30":"rgba(52,211,153,.3)"};
+
+// ===== HELPERS =====
+const fn=n=>{if(!n&&n!==0)return"—";n=+n;if(Math.abs(n)>=1e6)return(n/1e6).toFixed(1)+"M";if(Math.abs(n)>=1e3)return(n/1e3).toFixed(1)+"K";return n.toLocaleString("ko-KR")};
+const fnP=n=>{if(!n&&n!==0)return"—";return(+n).toLocaleString("ko-KR",{maximumFractionDigits:1})};
+const fy=s=>s?(s.slice(2,4)+"."+s.slice(4)):s;
+const ks=o=>Object.keys(o||{}).sort();
+const lt=o=>{const k=ks(o);return k.length?k[k.length-1]:null};
+const y12=y=>(+y.slice(0,4)-1)+y.slice(4);
+const ch=(v,pre="")=>{if(v==null)return'<span class="nt">—</span>';const c=v>0?"up":v<0?"dn":"nt";return`<span class="${c}">${pre}${v>0?"▲":v<0?"▼":""}${Math.abs(v).toFixed(1)}%</span>`};
+const chB=v=>{if(v==null)return'<span class="bg nt">—</span>';const c=v>0?"up":v<0?"dn":"nt";return`<span class="bg ${c}">${v>0?"▲":"▼"}${Math.abs(v).toFixed(1)}%</span>`};
+
+// Slice months by time range
+function sliceByRange(months) {
+  if (timeRange === "6m") return months.slice(-6);
+  if (timeRange === "1y") return months.slice(-12);
+  return months; // "all"
+}
+
+// Get cumulative for a specific period
+function getC(sec, ym, p) {
+  return sec?.[ym]?.[p]?.c ?? null;
+}
+function getW(sec, ym, p) {
+  return sec?.[ym]?.[p]?.w ?? null;
+}
+
+// YoY for same period comparison
+function yoyP(sec, ym, p) {
+  const cur = getC(sec, ym, p);
+  const prev = getC(sec, y12(ym), p);
+  if (cur == null || prev == null || prev === 0) return null;
+  return (cur - prev) / prev * 100;
+}
+
+// MoM: compare same period of prev month
+function momP(sec, ym, p) {
+  const cur = getC(sec, ym, p);
+  const pm = prevMonth(ym);
+  const prev = getC(sec, pm, p);
+  if (cur == null || prev == null || prev === 0) return null;
+  return (cur - prev) / prev * 100;
+}
+
+function prevMonth(ym) {
+  let y = +ym.slice(0,4), m = +ym.slice(4);
+  m--; if(m<1){m=12;y--;}
+  return y + String(m).padStart(2,"0");
+}
+
+// Latest available period for a section
+function latestPeriod(sec) {
+  const months = ks(sec);
+  if (!months.length) return {ym:null, p:null};
+  const lm = months[months.length-1];
+  const periods = ks(sec[lm]);
+  const lp = periods[periods.length-1];
+  return {ym: lm, p: lp};
+}
+
+// Daily export = cumulative / business_days
+function dailyExp(sec, ym, p) {
+  const c = getC(sec, ym, p);
+  if (c == null || !BD?.[ym]?.[p]) return null;
+  // For ~20일, total bdays = bdays_10 + bdays_20; for ~30일, all three
+  let totalDays = 0;
+  if (p === "10") totalDays = BD[ym]["10"] || 0;
+  else if (p === "20") totalDays = (BD[ym]["10"]||0) + (BD[ym]["20"]||0);
+  else if (p === "30") totalDays = (BD[ym]["10"]||0) + (BD[ym]["20"]||0) + (BD[ym]["30"]||0);
+  return totalDays > 0 ? c / totalDays : null;
+}
+
+// ===== MAIN SHEETS (priority order for KPI) =====
+const MAIN_SHEETS = ["보톡스","라면(원화)","화장품","반도체","타이어","굴삭기","태양광","임플란트","변압기","K9","천무","방산"];
+
+// ===== SHEET GROUPS (multiple sheets under one tab) =====
+const GROUPS = {
+  "반도체": ["반도체 _복합구조칩(HBM포함)","반도체 _디램모듈","반도체 _낸드"],
+  "변압기": ["변압기_대형변압기","변압기_100KVA이하","변압기_100KVA초과650KVA이하","변압기_차단기"],
+  "방산": ["K9","천무","탄약"]
+};
+const GROUP_NAMES = Object.keys(GROUPS);
+// Sheets that belong to a group (don't show as individual tabs)
+const GROUPED = new Set(Object.values(GROUPS).flat());
+// Currently selected sub-sheet within a group
+let selSub = null;
+
+// Get effective PD entry (for grouped items, use first sub-sheet for KPI)
+function getGroupPD(gn) {
+  const subs = GROUPS[gn];
+  if (!subs) return PD[gn];
+  return PD[subs[0]];
+}
+
+// ===== RENDER =====
+function refresh() {
+  if (!PD) return;
+  rKPI();
+  rTabs();
+  rMain();
+}
+
+function rKPI() {
+  const el = document.getElementById("kpi");
+  let h = "";
+  const sheets = MAIN_SHEETS.filter(s => PD[s] || GROUPS[s]);
+  for (const sn of sheets.slice(0, 8)) {
+    const sd = GROUPS[sn] ? getGroupPD(sn) : PD[sn];
+    if (!sd) continue;
+    const world = sd.s["전세계"] || Object.values(sd.s)[0];
+    if (!world) continue;
+    const {ym, p} = latestPeriod(world);
+    if (!ym) continue;
+    const val = getC(world, ym, p);
+    const yv = yoyP(world, ym, p);
+    const onclick = GROUPS[sn] ? `goGroup('${sn}')` : `goSheet('${sn}')`;
+    h += `<div class="kpi${(tab===sn||selSheet===sn)?" on":""}" onclick="${onclick}">
+      <div class="kl">${sn} <span class="pbadge p${p}">~${p}일</span></div>
+      <div class="kv">${fn(val)}</div>
+      <div class="kc">${ch(yv,"Y ")} <span style="color:var(--t4)">${fy(ym)}</span></div>
+    </div>`;
+  }
+  el.innerHTML = h;
+}
+
+function rTabs() {
+  const el = document.getElementById("tabs");
+  let h = `<button class="tab${tab==="overview"?" on":""}" onclick="goTab('overview')">📊 총괄</button>`;
+  h += `<button class="tab${tab==="daily"?" on":""}" onclick="goTab('daily')">📅 일일수출</button>`;
+  // Main sheets & groups
+  const shown = new Set();
+  const ordered = [...MAIN_SHEETS, ...Object.keys(PD).filter(s=>!GROUPED.has(s)&&!MAIN_SHEETS.includes(s))];
+  for (const sn of ordered) {
+    if (shown.has(sn)) continue;
+    shown.add(sn);
+    if (GROUPS[sn]) {
+      // Group tab - active if tab matches group name or any sub-sheet
+      const isOn = tab===sn || GROUPS[sn].includes(tab);
+      h += `<button class="tab${isOn?" on":""}" onclick="goGroup('${sn}')">${sn}</button>`;
+    } else if (!GROUPED.has(sn) && PD[sn]) {
+      h += `<button class="tab${tab===sn?" on":""}" onclick="goTab('${sn}')">${sn}</button>`;
+    }
+  }
+  el.innerHTML = h;
+}
+
+function goGroup(gn) {
+  tab = gn;
+  selSub = GROUPS[gn][0];
+  selSection = "전세계";
+  rTabs(); rMain();
+}
+
+function goTab(t) { tab = t; rTabs(); rMain(); }
+function goSheet(sn) { tab = sn; selSection = "전세계"; rTabs(); rMain(); }
+
+function rMain() {
+  charts.forEach(c=>c.destroy()); charts=[];
+  const el = document.getElementById("main");
+  if (tab === "overview") rOverview(el);
+  else if (tab === "daily") rDaily(el);
+  else if (GROUPS[tab]) rGroupSheet(el, tab);
+  else rSheet(el, tab);
+}
+
+// ===== GROUP SHEET VIEW =====
+function rGroupSheet(el, gn) {
+  const subs = GROUPS[gn];
+  if (!selSub || !subs.includes(selSub)) selSub = subs[0];
+  
+  let h = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+    <button class="bbtn" onclick="goTab('overview')">← 목록</button>
+    <span style="font-size:18px;font-weight:900">${gn}</span>
+  </div>`;
+  
+  // Sub-sheet pills
+  h += '<div class="pills" style="justify-content:flex-start">';
+  subs.forEach(sub => {
+    if (!PD[sub]) return;
+    const active = selSub === sub;
+    h += `<button class="pill${active?" on":""}" onclick="selSub='${sub}';rMain()">${sub.replace(gn+'_','').replace(gn+' _','')}</button>`;
+  });
+  h += '</div>';
+  
+  // Render the selected sub-sheet
+  rSheet(el, selSub, h);
+}
+
+// ===== OVERVIEW =====
+function rOverview(el) {
+  const allSheets = Object.keys(PD);
+  // Find latest common month
+  let latestYm = null;
+  for (const sn of allSheets) {
+    const world = PD[sn].s["전세계"] || Object.values(PD[sn].s)[0];
+    if (!world) continue;
+    const {ym} = latestPeriod(world);
+    if (ym && (!latestYm || ym > latestYm)) latestYm = ym;
+  }
+
+  let h = `<div class="st"><span class="d"></span>잠정치 총괄 (${fy(latestYm)})</div>`;
+
+  // Period filter pills
+  h += `<div class="pills">
+    <button class="pill${periodFilter==="all"?" on":""}" onclick="periodFilter='all';rMain()">전체</button>
+    <button class="pill${periodFilter==="10"?" on":""}" onclick="periodFilter='10';rMain()">~10일</button>
+    <button class="pill${periodFilter==="20"?" on":""}" onclick="periodFilter='20';rMain()">~20일</button>
+    <button class="pill${periodFilter==="30"?" on":""}" onclick="periodFilter='30';rMain()">~30일</button>
+  </div>`;
+
+  // Table: all sheets, latest data
+  h += '<div class="ts"><table class="dt"><thead><tr><th>#</th><th>품목</th><th>HS</th><th>기간</th><th>누적(천$)</th><th>전년동기</th><th>YoY</th><th>MoM</th><th>일일수출</th></tr></thead><tbody>';
+
+  const rows = [];
+  for (const sn of allSheets) {
+    if (GROUPED.has(sn)) continue; // skip grouped sub-sheets
+    const sd = PD[sn];
+    if (!sd) continue;
+    const world = sd.s["전세계"] || Object.values(sd.s)[0];
+    if (!world) continue;
+    const {ym, p} = latestPeriod(world);
+    if (!ym) continue;
+    if (periodFilter !== "all" && p !== periodFilter) continue;
+    const val = getC(world, ym, p);
+    const prevVal = getC(world, y12(ym), p);
+    const yv = yoyP(world, ym, p);
+    const mv = momP(world, ym, p);
+    const dv = dailyExp(world, ym, p);
+    rows.push({sn, hs: sd.h, ym, p, val, prevVal, yv, mv, dv});
+  }
+  rows.sort((a,b) => (b.val||0) - (a.val||0));
+
+  rows.forEach((r, i) => {
+    const isGroup = GROUP_NAMES.includes(r.sn);
+    const onclick = isGroup ? `goGroup('${r.sn}')` : `goSheet('${r.sn}')`;
+    h += `<tr class="ck" onclick="${onclick}">
+      <td>${i+1}</td>
+      <td>${r.sn}</td>
+      <td class="mono" style="color:var(--t4);font-size:10px">${r.hs}</td>
+      <td><span class="pbadge p${r.p}">${fy(r.ym)} ~${r.p}일</span></td>
+      <td style="color:var(--t1)">${fnP(r.val)}</td>
+      <td>${fnP(r.prevVal)}</td>
+      <td>${chB(r.yv)}</td>
+      <td>${chB(r.mv)}</td>
+      <td>${r.dv != null ? fnP(r.dv) : '<span class="nt">—</span>'}</td>
+    </tr>`;
+  });
+  h += '</tbody></table></div>';
+
+  // Top movers chart
+  const topYoY = [...rows].filter(r=>r.yv!=null).sort((a,b)=>(b.yv||0)-(a.yv||0));
+  const top5 = topYoY.slice(0,8);
+  const bot5 = topYoY.slice(-8).reverse();
+
+  h += '<div class="cg">';
+  h += '<div class="cb"><h4>YoY 급등 TOP</h4><canvas id="ov_top"></canvas></div>';
+  h += '<div class="cb"><h4>YoY 급락 TOP</h4><canvas id="ov_bot"></canvas></div>';
+  h += '</div>';
+
+  el.innerHTML = h;
+
+  // Charts
+  const mkBar = (id, items, color) => {
+    const ctx = document.getElementById(id); if(!ctx) return;
+    charts.push(new Chart(ctx, {
+      type: "bar",
+      data: {
+        labels: items.map(r => r.sn),
+        datasets: [{
+          data: items.map(r => r.yv),
+          backgroundColor: items.map(r => r.yv > 0 ? "rgba(52,211,153,.45)" : "rgba(239,95,95,.45)"),
+          borderWidth: 0, borderRadius: 3
+        }]
+      },
+      options: {
+        indexAxis: "y", responsive: true,
+        plugins: {legend:{display:false}},
+        scales: {x:{ticks:{callback:v=>v.toFixed(0)+"%"},grid:{color:"rgba(255,255,255,.04)"}},y:{ticks:{font:{size:10}}}}
+      }
+    }));
+  };
+  mkBar("ov_top", top5);
+  mkBar("ov_bot", bot5);
+}
+
+// ===== PERIOD COMPARE =====
+function rCompare(el) {
+  const allSheets = MAIN_SHEETS.filter(s=>PD[s]).slice(0,6);
+  let h = '<div class="st"><span class="d" style="background:var(--cy)"></span>동기간 누적 비교 (~10일 vs ~10일, ~20일 vs ~20일, ~30일 vs ~30일)</div>';
+  h += '<div class="cg">';
+  allSheets.forEach((sn, i) => {
+    h += `<div class="cb"><h4>${sn}</h4><canvas id="cmp_${i}"></canvas></div>`;
+  });
+  h += '</div>';
+  el.innerHTML = h;
+
+  // For each sheet, show bar chart comparing periods across months
+  allSheets.forEach((sn, i) => {
+    const world = PD[sn].s["전세계"] || Object.values(PD[sn].s)[0];
+    if (!world) return;
+    const months = ks(world).slice(-6);
+    const ctx = document.getElementById("cmp_"+i);
+    if (!ctx) return;
+
+    const datasets = ["10","20","30"].map(p => ({
+      label: "~"+p+"일",
+      data: months.map(m => getC(world, m, p)),
+      backgroundColor: PBGCOL[p],
+      borderColor: PCOL[p],
+      borderWidth: 1, borderRadius: 3
+    }));
+
+    charts.push(new Chart(ctx, {
+      type: "bar",
+      data: { labels: months.map(fy), datasets },
+      options: {
+        responsive: true,
+        plugins: {legend:{labels:{boxWidth:10,font:{size:9}}}},
+        scales: {y:{ticks:{callback:v=>fn(v)}},x:{grid:{display:false}}}
+      }
+    }));
+  });
+}
+
+// ===== DAILY EXPORT =====
+function rDaily(el) {
+  const allSheets = MAIN_SHEETS.filter(s=>PD[s]).slice(0,8);
+  let h = '<div class="st"><span class="d" style="background:var(--am)"></span>일일수출액 추이 (누적 ÷ 영업일수)</div>';
+  h += `<div class="pills">
+    <button class="pill${periodFilter==="30"?" on":""}" onclick="periodFilter='30';rMain()">~30일</button>
+    <button class="pill${periodFilter==="20"?" on":""}" onclick="periodFilter='20';rMain()">~20일</button>
+    <button class="pill${periodFilter==="10"?" on":""}" onclick="periodFilter='10';rMain()">~10일</button>
+  </div>`;
+  if (periodFilter === "all") periodFilter = "30";
+
+  h += '<div class="cg">';
+  allSheets.forEach((sn, i) => {
+    h += `<div class="cb"><h4>${sn}</h4><canvas id="daily_${i}"></canvas></div>`;
+  });
+  h += '</div>';
+  el.innerHTML = h;
+
+  allSheets.forEach((sn, i) => {
+    const world = PD[sn].s["전세계"] || Object.values(PD[sn].s)[0];
+    if (!world) return;
+    const months = ks(world).slice(-12);
+    const ctx = document.getElementById("daily_"+i);
+    if (!ctx) return;
+
+    const p = periodFilter;
+    const dailyData = months.map(m => dailyExp(world, m, p));
+    const yoyData = months.map(m => {
+      const cur = dailyExp(world, m, p);
+      const prev = dailyExp(world, y12(m), p);
+      if (cur == null || prev == null || prev === 0) return null;
+      return (cur - prev) / prev * 100;
+    });
+
+    charts.push(new Chart(ctx, {
+      type: "bar",
+      data: {
+        labels: months.map(fy),
+        datasets: [
+          {type:"bar", label:"일일수출(천$)", data:dailyData, backgroundColor:PBGCOL[p], borderColor:PCOL[p], borderWidth:1, borderRadius:3, yAxisID:"y"},
+          {type:"line", label:"YoY(%)", data:yoyData, borderColor:"#ef5f5f", borderWidth:2, tension:.3, pointRadius:2, yAxisID:"y1", spanGaps:true}
+        ]
+      },
+      options: {
+        responsive: true,
+        interaction:{mode:"index",intersect:false},
+        plugins:{legend:{labels:{boxWidth:10,font:{size:9}}},tooltip:{mode:"index",intersect:false}},
+        scales:{
+          y:{position:"left",ticks:{callback:v=>fn(v)}},
+          y1:{position:"right",grid:{display:false},ticks:{callback:v=>v.toFixed(0)+"%"},display:true},
+          x:{grid:{display:false}}
+        }
+      }
+    }));
+  });
+}
+
+// ===== INDIVIDUAL SHEET =====
+function rSheet(el, sn, prefixH) {
+  const sd = PD[sn];
+  if (!sd) { el.innerHTML = '<div style="text-align:center;padding:50px;color:var(--t4)">데이터 없음</div>'; return; }
+
+  const sections = Object.keys(sd.s);
+  if (!sections.includes(selSection)) selSection = sections[0];
+  const sec = sd.s[selSection];
+  const {ym: latYm, p: latP} = latestPeriod(sec);
+
+  let h = prefixH || `<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+    <button class="bbtn" onclick="goTab('overview')">← 목록</button>
+    <span style="font-size:18px;font-weight:900">${sn}</span>
+    <span class="mono" style="color:var(--t4);font-size:12px">HS ${sd.h}</span>
+    <span class="mono" style="font-size:11px">${sd.d} · ${sd.u}</span>
+    <span class="pbadge p${latP}">${fy(latYm)} ~${latP}일</span>
+  </div>`;
+  
+  if (prefixH) {
+    h += `<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+      <span class="mono" style="color:var(--t4);font-size:12px">HS ${sd.h}</span>
+      <span class="mono" style="font-size:11px">${sd.d} · ${sd.u}</span>
+      <span class="pbadge p${latP}">${fy(latYm)} ~${latP}일</span>
+    </div>`;
+  }
+
+  // Time range selector
+  h += '<div class="pills" style="justify-content:flex-start;margin-bottom:8px">';
+  [["all","전체"],["1y","1년"],["6m","6개월"]].forEach(([v,l]) => {
+    h += `<button class="pill${timeRange===v?" on":""}" onclick="timeRange='${v}';rMain()">${l}</button>`;
+  });
+  h += '</div>';
+
+  // Section selector
+  if (sections.length > 1) {
+    h += '<div class="sec-sel">';
+    sections.forEach(s => {
+      h += `<button class="sec-btn${selSection===s?" on":""}" onclick="selSection='${s}';rMain()">${s}</button>`;
+    });
+    h += '</div>';
+  }
+
+  const months = ks(sec);
+
+  // 1. Weekly chart (bar) + 3-week avg (line) — MAIN CHART
+  h += '<div class="cg"><div class="cb w"><h4>주간 수출액 (막대) + 3주 이동평균 (선)</h4><canvas id="sh_weekly"></canvas></div></div>';
+
+  // 2. Same-period comparison (toggle: ~10일/~20일/~30일)
+  if (!window._spPeriod) window._spPeriod = "10";
+  h += '<div class="cb w" style="margin-bottom:14px"><h4 id="sh_sp_title" style="margin-bottom:0">' + sn + ' · ' + sd.d + '→' + selSection + ' — 누적치 동기비교 (~' + window._spPeriod + '일 기준)</h4>';
+  h += '<div class="pills" style="margin:10px 0 8px;justify-content:flex-start">';
+  ["10","20","30"].forEach(p => {
+    h += `<button class="pill${window._spPeriod===p?" on":""}" onclick="window._spPeriod='${p}';rMain()">~${p}일</button>`;
+  });
+  h += '</div><canvas id="sh_sp"></canvas></div>';
+
+  // 3. Daily export + Price
+  h += '<div class="cg">';
+  h += '<div class="cb"><h4>일일수출액 추이</h4><canvas id="sh_daily"></canvas></div>';
+  h += '<div class="cb"><h4>단가 (USD/kg)</h4><canvas id="sh_price"></canvas></div>';
+  h += '</div>';
+
+  // 3. Data table
+  const rmTbl = sliceByRange(months);
+  const rr = [...rmTbl].reverse();
+  h += '<div class="st"><span class="d" style="background:var(--am)"></span>데이터 테이블</div>';
+  h += '<div class="ts"><table class="dt"><thead><tr><th>연월</th><th>기간</th><th>누적(천$)</th><th>중량(톤)</th><th>단가</th><th>일일수출</th><th>YoY</th><th>MoM</th></tr></thead><tbody>';
+
+  for (const ym of rr) {
+    const periods = ks(sec[ym]);
+    periods.forEach((p, pi) => {
+      const c = getC(sec, ym, p);
+      const w = getW(sec, ym, p);
+      const price = (c && w && w > 0) ? (c/w) : null;
+      const dv = dailyExp(sec, ym, p);
+      const yv = yoyP(sec, ym, p);
+      const mv = momP(sec, ym, p);
+      h += `<tr>
+        <td style="text-align:left;font-family:Noto Sans KR">${pi===0?fy(ym):""}</td>
+        <td><span class="pbadge p${p}">~${p}일</span></td>
+        <td style="color:var(--t1)">${fnP(c)}</td>
+        <td>${w ? fnP(w) : '<span class="nt">—</span>'}</td>
+        <td class="mono" style="color:var(--am)">${price!=null ? "$"+price.toFixed(2) : '<span class="nt">—</span>'}</td>
+        <td>${dv!=null ? fnP(dv) : '<span class="nt">—</span>'}</td>
+        <td>${chB(yv)}</td>
+        <td>${chB(mv)}</td>
+      </tr>`;
+    });
+  }
+  h += '</tbody></table></div>';
+
+  // 4. Country sections comparison (if multiple sections)
+  if (sections.length > 1) {
+    h += '<div class="st"><span class="d" style="background:var(--cy)"></span>국가/구분별 비교</div>';
+    h += '<div class="ts"><table class="dt"><thead><tr><th>#</th><th>구분</th><th>기간</th><th>누적(천$)</th><th>YoY</th><th>MoM</th></tr></thead><tbody>';
+    sections.forEach((s, i) => {
+      const secD = sd.s[s];
+      const {ym, p} = latestPeriod(secD);
+      if (!ym) return;
+      const c = getC(secD, ym, p);
+      const yv = yoyP(secD, ym, p);
+      const mv = momP(secD, ym, p);
+      h += `<tr class="ck" onclick="selSection='${s}';rMain()">
+        <td>${i+1}</td>
+        <td>${s}</td>
+        <td><span class="pbadge p${p}">${fy(ym)} ~${p}일</span></td>
+        <td style="color:var(--t1)">${fnP(c)}</td>
+        <td>${chB(yv)}</td>
+        <td>${chB(mv)}</td>
+      </tr>`;
+    });
+    h += '</tbody></table></div>';
+  }
+
+  el.innerHTML = h;
+
+  // === Charts ===
+  const rm = sliceByRange(months);
+
+  // Weekly bar + 3-week moving average line
+  const wCtx = document.getElementById("sh_weekly");
+  if (wCtx) {
+    // Build flat timeline: each entry = {label, v (weekly), a (3wk avg)}
+    const timeline = [];
+    for (const m of rm) {
+      for (const p of ["10","20","30"]) {
+        const entry = sec[m]?.[p];
+        if (entry && entry.v != null) {
+          timeline.push({label: fy(m)+" ~"+p, v: entry.v, a: entry.a || null});
+        }
+      }
+    }
+    charts.push(new Chart(wCtx, {
+      type: "bar",
+      data: {
+        labels: timeline.map(t => t.label),
+        datasets: [
+          {type:"bar", label:"주간 수출(천$)", data:timeline.map(t=>t.v), backgroundColor:"rgba(77,159,255,.35)", borderColor:"#4d9fff", borderWidth:1, borderRadius:3, yAxisID:"y"},
+          {type:"line", label:"3주 이동평균", data:timeline.map(t=>t.a), borderColor:"#e8a830", backgroundColor:"rgba(232,168,48,.1)", borderWidth:2.5, tension:.3, pointRadius:1.5, pointBackgroundColor:"#e8a830", yAxisID:"y", spanGaps:true}
+        ]
+      },
+      options: {
+        responsive:true,
+        interaction:{mode:"index",intersect:false},
+        plugins:{legend:{labels:{boxWidth:10,font:{size:9}}},tooltip:{mode:"index",intersect:false,callbacks:{label:c=>c.dataset.label+": "+fn(c.parsed.y)}}},
+        scales:{y:{ticks:{callback:v=>fn(v)}},x:{grid:{display:false},ticks:{maxRotation:45,font:{size:8}}}}
+      }
+    }));
+  }
+
+  // Same-period comparison chart (single, toggled by _spPeriod)
+  const spCtx = document.getElementById("sh_sp");
+  if (spCtx) {
+    const p = window._spPeriod || "10";
+    const spMonths = sliceByRange(months);
+    const data = spMonths.map(m => getC(sec, m, p));
+    const hasData = data.some(v => v != null);
+    if (hasData) {
+      const yoyData = spMonths.map(m => yoyP(sec, m, p));
+      charts.push(new Chart(spCtx, {
+        type: "bar",
+        data: {
+          labels: spMonths.map(fy),
+          datasets: [
+            {type:"bar", label:"누적 수출액", data, backgroundColor:PBGCOL[p], borderColor:PCOL[p], borderWidth:1, borderRadius:3, yAxisID:"y"},
+            {type:"line", label:"YoY(%)", data:yoyData, borderColor:"#ef5f5f", borderWidth:2, tension:.3, pointRadius:2, yAxisID:"y1", spanGaps:true}
+          ]
+        },
+        options: {
+          responsive:true,
+          interaction:{mode:"index",intersect:false},
+          plugins:{legend:{labels:{boxWidth:10,font:{size:9}}},tooltip:{mode:"index",intersect:false,callbacks:{label:c=>c.dataset.label+": "+(c.datasetIndex===0?fn(c.parsed.y):(c.parsed.y?.toFixed(1)+"%"))}}},
+          scales:{
+            y:{position:"left",ticks:{callback:v=>fn(v)}},
+            y1:{position:"right",grid:{display:false},ticks:{callback:v=>v?.toFixed(0)+"%"}},
+            x:{grid:{display:false},ticks:{font:{size:8},maxRotation:45}}
+          }
+        }
+      }));
+    }
+  }
+
+  // Daily export chart
+  const dCtx = document.getElementById("sh_daily");
+  if (dCtx) {
+    const pf = "30"; // use ~30일 for daily export
+    const dailyData = rm.map(m => dailyExp(sec, m, pf));
+    const dailyYoy = rm.map(m => {
+      const cur = dailyExp(sec, m, pf);
+      const prev = dailyExp(sec, y12(m), pf);
+      if (cur==null||prev==null||prev===0) return null;
+      return (cur-prev)/prev*100;
+    });
+    charts.push(new Chart(dCtx, {
+      type: "bar",
+      data: {
+        labels: rm.map(fy),
+        datasets: [
+          {type:"bar", label:"일일수출(천$)", data:dailyData, backgroundColor:"rgba(52,211,153,.35)", borderColor:"#34d399", borderWidth:1, borderRadius:3, yAxisID:"y"},
+          {type:"line", label:"YoY(%)", data:dailyYoy, borderColor:"#ef5f5f", borderWidth:2, tension:.3, pointRadius:2, yAxisID:"y1", spanGaps:true}
+        ]
+      },
+      options: {
+        responsive:true,
+        interaction:{mode:"index",intersect:false},
+        plugins:{legend:{labels:{boxWidth:10,font:{size:9}}}},
+        scales:{
+          y:{position:"left",ticks:{callback:v=>fn(v)}},
+          y1:{position:"right",grid:{display:false},ticks:{callback:v=>v?.toFixed(0)+"%"}},
+          x:{grid:{display:false},ticks:{font:{size:8}}}
+        }
+      }
+    }));
+  }
+
+  // Price chart
+  const prCtx = document.getElementById("sh_price");
+  if (prCtx) {
+    const ds = ["30","20","10"].filter(p => {
+      return rm.some(m => {
+        const c = getC(sec, m, p);
+        const w = getW(sec, m, p);
+        return c && w && w > 0;
+      });
+    }).map(p => ({
+      label: "~"+p+"일",
+      data: rm.map(m => {
+        const c = getC(sec, m, p);
+        const w = getW(sec, m, p);
+        return (c && w && w > 0) ? c/w : null;
+      }),
+      borderColor: PCOL[p],
+      borderWidth: 2, tension: .3, pointRadius: 2, fill: false, spanGaps: true
+    }));
+    if (ds.length) {
+      charts.push(new Chart(prCtx, {
+        type: "line",
+        data: { labels: rm.map(fy), datasets: ds },
+        options: {
+          responsive: true,
+          plugins:{legend:{labels:{boxWidth:10}}},
+          scales:{y:{ticks:{callback:v=>"$"+v.toFixed(1)}},x:{grid:{display:false}}}
+        }
+      }));
+    }
+  }
+}
+
+// ===== INIT =====
+(async function(){
+  // Try loading external JSON files
+  try {
+    const r = await fetch("provisional_data.json", {cache:"no-cache"});
+    if (r.ok) PD = await r.json();
+  } catch(e) {}
+
+  try {
+    const r = await fetch("business_days.json", {cache:"no-cache"});
+    if (r.ok) BD = await r.json();
+  } catch(e) {}
+
+  // Fallback: embedded data
+  if (!PD) {
+    // Will be populated by data generation script
+    console.log("[provisional] No external data found. Embed data or provide JSON files.");
+    document.getElementById("main").innerHTML = '<div style="text-align:center;padding:50px;color:var(--t4)">데이터 파일을 찾을 수 없습니다.<br>provisional_data.json / business_days.json 파일이 필요합니다.</div>';
+    return;
+  }
+
+  document.getElementById("dt").textContent = new Date().toLocaleString("ko-KR");
+  refresh();
+})();
+</script>
+</body>
+</html>

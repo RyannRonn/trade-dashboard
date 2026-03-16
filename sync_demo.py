@@ -9,7 +9,10 @@ html_path = os.path.join(base, "trade.html")
 with open(json_path, "r", encoding="utf-8") as f:
     data = json.load(f)
 
-demo_str = json.dumps(data, ensure_ascii=False)
+# ranking_6d, hs2_names, hs4_names는 DEMO에서 제외 (별도 fetch로 로드)
+exclude_keys = {"ranking_6d", "hs2_names", "hs4_names"}
+demo_data = {k: v for k, v in data.items() if k not in exclude_keys}
+demo_str = json.dumps(demo_data, ensure_ascii=False)
 
 with open(html_path, "r", encoding="utf-8") as f:
     html = f.read()

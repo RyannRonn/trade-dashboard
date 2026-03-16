@@ -5,7 +5,7 @@
 - 이미 수집된 월은 건너뛰고 최신 월만 수집
 - trade_data_v2.json의 "ranking_6d" 키에 저장
 """
-import os, sys, json, time, io
+import os, sys, json, time, io, sqlite3
 from datetime import datetime
 from collections import defaultdict
 
@@ -81,32 +81,86 @@ def collect_hs4_batch(hs4, api_key, date_ranges):
     return dict(items_6d)
 
 
+def init_db(db_path):
+    """ranking_6d 테이블 생성 (없으면)"""
+    conn = sqlite3.connect(db_path)
+    conn.execute("""
+    CREATE TABLE IF NOT EXISTS ranking_6d (
+        hs_code TEXT NOT NULL,
+        ym TEXT NOT NULL,
+        name TEXT DEFAULT '',
+        exp_usd INTEGER DEFAULT 0,
+        PRIMARY KEY (hs_code, ym)
+    )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_r6d_ym ON ranking_6d(ym)")
+    conn.commit()
+    return conn
+
+
+def get_existing_months_from_db(conn):
+    """DB에서 기존 수집된 월 목록 조회"""
+    cur = conn.execute("SELECT DISTINCT ym FROM ranking_6d")
+    return {row[0] for row in cur.fetchall()}
+
+
+def save_batch_to_db(conn, batch):
+    """수집된 배치 데이터를 DB에 저장"""
+    rows = []
+    for hs6, info in batch.items():
+        name = info.get("name", "")
+        for ym, exp_usd in info.get("exp", {}).items():
+            rows.append((hs6, ym, name, exp_usd))
+    if rows:
+        conn.executemany(
+            "INSERT OR REPLACE INTO ranking_6d (hs_code, ym, name, exp_usd) VALUES (?, ?, ?, ?)",
+            rows
+        )
+        conn.commit()
+    return len(rows)
+
+
+def export_db_to_json(conn, json_path):
+    """DB의 ranking_6d를 JSON으로 내보내기"""
+    cur = conn.execute("SELECT hs_code, ym, name, exp_usd FROM ranking_6d ORDER BY hs_code, ym")
+    ranking = {}
+    for hs_code, ym, name, exp_usd in cur:
+        if hs_code not in ranking:
+            ranking[hs_code] = {"name": name, "exp": {}}
+        ranking[hs_code]["exp"][ym] = exp_usd
+        if not ranking[hs_code]["name"] and name:
+            ranking[hs_code]["name"] = name
+
+    with open(json_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    data["ranking_6d"] = ranking
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False)
+    return len(ranking)
+
+
 def main():
     if not API_KEY:
         print("ERROR: API_KEY 환경변수 필요", file=sys.stderr)
         sys.exit(1)
 
-    # 기존 JSON 로드
-    json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "trade_data_v2.json")
-    with open(json_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
+    base = os.path.dirname(os.path.abspath(__file__))
+    json_path = os.path.join(base, "trade_data_v2.json")
+    db_path = os.path.join(base, "trade.db")
 
-    # 기존 ranking_6d 데이터
-    ranking = data.get("ranking_6d", {})
-
-    # 기존 데이터에서 수집 완료된 월 확인 (아무 항목이나 하나 확인)
-    existing_months = set()
-    for item_data in ranking.values():
-        existing_months.update(item_data.get("exp", {}).keys())
+    # DB 초기화 및 기존 수집 월 조회
+    conn = init_db(db_path)
+    existing_months = get_existing_months_from_db(conn)
 
     # 수집할 월 계산
     missing = get_months_to_collect(existing_months)
     if not missing:
         print("모든 월이 이미 수집되어 있습니다. 종료.")
+        conn.close()
         return
 
-    print(f"기존 수집 월: {len(existing_months)}개")
-    print(f"신규 수집 월: {missing}")
+    print(f"기존 수집 월: {len(existing_months)}개", flush=True)
+    print(f"신규 수집 월: {missing}", flush=True)
 
     date_ranges = make_ranges(missing)
     print(f"API 구간: {date_ranges}")
@@ -117,40 +171,35 @@ def main():
     print(f"\n4자리 HS 코드 {total}개 수집 시작...\n")
 
     new_count = 0
+    total_rows = 0
     start_time = time.time()
 
     for idx, hs4 in enumerate(hs4_list):
         batch = collect_hs4_batch(hs4, API_KEY, date_ranges)
 
-        for hs6, new_data in batch.items():
-            if hs6 not in ranking:
-                ranking[hs6] = {"name": new_data["name"], "exp": {}}
-                new_count += 1
-            # 품목명 업데이트 (기존에 없으면)
-            if not ranking[hs6].get("name") and new_data["name"]:
-                ranking[hs6]["name"] = new_data["name"]
-            # 월별 데이터 merge
-            for ym, val in new_data["exp"].items():
-                ranking[hs6]["exp"][ym] = val
+        # DB에 바로 저장
+        if batch:
+            rows_saved = save_batch_to_db(conn, batch)
+            total_rows += rows_saved
+            new_count += len(batch)
 
         # 진행률 표시
         if (idx + 1) % 100 == 0 or idx == total - 1:
             elapsed = time.time() - start_time
             pct = (idx + 1) / total * 100
             eta = elapsed / (idx + 1) * (total - idx - 1)
-            print(f"  [{idx+1}/{total}] {pct:.0f}% — {elapsed:.0f}s 경과, 잔여 {eta:.0f}s")
+            print(f"  [{idx+1}/{total}] {pct:.0f}% — {elapsed:.0f}s 경과, 잔여 {eta:.0f}s — DB {total_rows}행", flush=True)
 
         time.sleep(REQUEST_DELAY)
 
     elapsed = time.time() - start_time
-    print(f"\n수집 완료: {elapsed:.0f}초")
-    print(f"총 6자리 항목: {len(ranking)}개 (신규 {new_count}개)")
+    print(f"\n수집 완료: {elapsed:.0f}초, DB {total_rows}행 저장")
 
-    # 저장
-    data["ranking_6d"] = ranking
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False)
-    print(f"trade_data_v2.json 저장 완료 ({os.path.getsize(json_path):,} bytes)")
+    # DB → JSON 내보내기
+    hs6_count = export_db_to_json(conn, json_path)
+    print(f"trade_data_v2.json 갱신 완료 (HS6 {hs6_count}개, {os.path.getsize(json_path):,} bytes)")
+
+    conn.close()
     print("DONE")
 
 
