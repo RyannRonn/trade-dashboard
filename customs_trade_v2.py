@@ -29,8 +29,8 @@ REQUEST_DELAY = 0.3
 
 # 품목 설정
 ITEMS = {
-    "8541": {"name": "반도체", "countries": ["US","CN","JP","TW","VN","DE","HK","SG","MY","IN","NL","PH","TH","IE","HU","PL","MX","GB"]},
-    "8542": {"name": "집적회로", "countries": ["US","CN","JP","TW","SG"]},
+    "8541": {"name": "반도체소자", "countries": ["US","CN","JP","TW","VN","DE","HK","SG","MY","IN","NL","PH","TH","IE","HU","PL","MX","GB"]},
+    "8542": {"name": "반도체", "countries": ["US","CN","JP","TW","VN","DE","HK","SG","MY","IN","NL","PH","TH","IE","HU","PL","MX","GB"]},
     "8703": {"name": "승용차", "countries": ["US","DE","AU","SA","CA"]},
     "8507": {"name": "2차전지", "countries": ["US","DE","HU","PL","CN"]},
     "3304": {"name": "화장품", "countries": ["US","CN","JP","VN","TH","RU","HK","MY","SG","AU","TW","ID","CA"]},
@@ -47,10 +47,10 @@ ITEMS = {
     "HFS": {"name": "건기식", "countries": ["US","CN","JP","VN","TH","AU","MY","HK","SG","TW","PH","ID","CA","RU","DE","AE","GB"]},
 }
 
-MAIN_ITEMS = ["8541", "ELK", "1902", "3304", "9018", "BTX", "HFS"]
+MAIN_ITEMS = ["8542", "ELK", "1902", "3304", "9018", "BTX", "HFS"]
 
 SUB_ITEMS = {
-    "8541": {
+    "8542": {
         "8542321010": "디램",
         "8542321030": "낸드",
         "8542323000": "복합구조칩",
