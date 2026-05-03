@@ -46,6 +46,11 @@ async def index():
     return FileResponse(os.path.join(BASE_DIR, "trade.html"))
 
 
+@app.get("/trade.html")
+async def trade_page():
+    return FileResponse(os.path.join(BASE_DIR, "trade.html"))
+
+
 @app.get("/provisional.html")
 async def provisional_page():
     return FileResponse(os.path.join(BASE_DIR, "provisional.html"))
