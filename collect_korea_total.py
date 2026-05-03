@@ -1,0 +1,144 @@
+#!/usr/bin/env python3
+"""한국 전체 수출입 총액 수집 (HS2 99개 합산)
+
+nitemtrade API의 hsSgn=2자리 호출 시 응답 첫 행 year='총계'에 그 HS2 챕터의
+한국 전체 합계가 옴. 99개 HS2(01~99) 합산 = 한국 전체 수출입 총액.
+
+이전엔 customs_trade_v2.py가 16개 모니터링 품목 합을 'total'로 저장해서
+대시보드에 한국 전체로 잘못 표시됨 (수출 50%, 수입 28% 수준).
+"""
+import os, sys, io, sqlite3, json, time
+from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from customs_trade_v2 import api_call_xml, parse_ym_from_year, safe_int
+
+API_KEY = os.environ.get("API_KEY", "")
+TARGET_MONTHS = 14
+WORKERS = int(os.environ.get("WORKERS", "5"))
+
+
+def get_target_months():
+    from datetime import datetime
+    now = datetime.now()
+    months = []
+    y, m = now.year, now.month
+    for _ in range(TARGET_MONTHS):
+        months.append(f"{y}{m:02d}")
+        m -= 1
+        if m < 1:
+            m = 12; y -= 1
+    return sorted(months)
+
+
+def make_ranges(months):
+    ranges = []
+    i = 0
+    while i < len(months):
+        chunk = months[i:i+12]
+        ranges.append((chunk[0], chunk[-1]))
+        i += 12
+    return ranges
+
+
+def collect_hs2(hs2, api_key, date_ranges):
+    """HS2 1개의 월별 한국 전체 수출입 합계 (응답 첫 행 '총계' 사용)"""
+    exp = defaultdict(int)
+    imp = defaultdict(int)
+    for start, end in date_ranges:
+        rows = api_call_xml("/nitemtrade/getNitemtradeList",
+                            {"strtYymm": start, "endYymm": end, "hsSgn": hs2},
+                            api_key)
+        # 응답: ym별로 첫 행이 year='총계'. 그 행의 expDlr/impDlr이 그 ym의 HS2 전체합
+        # 단 API는 ym별 '총계' 하나만 옴(전체기간 총계 아님). 검증: 값 = 다른 행 합과 일치
+        for r in rows:
+            if r.get("year") != "총계":
+                continue
+            # '총계' 행은 ym 정보 없음 → 그 호출의 모든 ym에 적용 불가
+            # 실제로는 호출 1회 = 단일 ym(start==end)일 때만 정확
+            pass
+        # 행 합산 방식이 더 정확/안전
+        for r in rows:
+            if r.get("year") == "총계":
+                continue
+            ym = parse_ym_from_year(r.get("year", ""))
+            if not ym:
+                continue
+            exp[ym] += safe_int(r.get("expDlr", 0))
+            imp[ym] += safe_int(r.get("impDlr", 0))
+    return dict(exp), dict(imp)
+
+
+def main():
+    if not API_KEY:
+        print("ERROR: API_KEY 환경변수 필요", file=sys.stderr); sys.exit(1)
+
+    base = os.path.dirname(os.path.abspath(__file__))
+    json_path = os.path.join(base, "trade_data_v2.json")
+    db_path = os.path.join(base, "trade.db")
+
+    months = get_target_months()
+    ranges = make_ranges(months)
+    print(f"수집 월: {months[0]}~{months[-1]} ({len(months)}개월), 구간 {ranges}")
+
+    hs2_list = [f"{i:02d}" for i in range(1, 100)]  # 01~99
+    print(f"HS2 {len(hs2_list)}개 호출 (worker={WORKERS})...")
+
+    exp_total = defaultdict(int)
+    imp_total = defaultdict(int)
+    start_time = time.time()
+
+    def _worker(hs2):
+        return hs2, collect_hs2(hs2, API_KEY, ranges)
+
+    done = 0
+    with ThreadPoolExecutor(max_workers=WORKERS) as ex:
+        futures = {ex.submit(_worker, h): h for h in hs2_list}
+        for fut in as_completed(futures):
+            try:
+                hs2, (exp, imp) = fut.result()
+            except Exception as e:
+                print(f"  [ERR] {futures[fut]}: {e}"); done += 1; continue
+            for ym, v in exp.items(): exp_total[ym] += v
+            for ym, v in imp.items(): imp_total[ym] += v
+            done += 1
+            if done % 20 == 0 or done == len(hs2_list):
+                el = time.time() - start_time
+                print(f"  [{done}/{len(hs2_list)}] {el:.0f}s")
+
+    print(f"\n수집 완료: {time.time()-start_time:.0f}초")
+    print("월별 합계:")
+    for ym in sorted(exp_total.keys()):
+        print(f"  {ym}: exp={exp_total[ym]:>15,} imp={imp_total[ym]:>15,}")
+
+    # DB 갱신
+    con = sqlite3.connect(db_path)
+    rows = [("total", "", "", "", ym, exp_total[ym], imp_total[ym], 0)
+            for ym in exp_total]
+    con.executemany(
+        "INSERT OR REPLACE INTO trade_data "
+        "(data_type, hs_code, sub_code, entity_code, ym, exp_usd, imp_usd, wgt) "
+        "VALUES (?,?,?,?,?,?,?,?)",
+        rows
+    )
+    con.commit(); con.close()
+    print(f"DB trade_data 'total' {len(rows)}행 갱신")
+
+    # JSON 갱신
+    with open(json_path, "r", encoding="utf-8") as f:
+        d = json.load(f)
+    d.setdefault("total", {"exp": {}, "imp": {}})
+    d["total"]["exp"] = {ym: exp_total[ym] for ym in sorted(exp_total)}
+    d["total"]["imp"] = {ym: imp_total[ym] for ym in sorted(imp_total)}
+    from datetime import datetime
+    d["total_generated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(d, f, ensure_ascii=False, separators=(",", ":"))
+    print(f"trade_data_v2.json 'total' 갱신 완료 ({os.path.getsize(json_path):,} bytes)")
+    print("DONE")
+
+
+if __name__ == "__main__":
+    main()

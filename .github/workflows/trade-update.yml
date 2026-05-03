@@ -41,6 +41,11 @@ jobs:
     - name: 🗄️ DB 동기화
       run: python -m collector.migrate_json
 
+    - name: 🇰🇷 한국 전체 수출입 총액 (HS2 99개 합산)
+      env:
+        API_KEY: ${{ secrets.DATA_GO_KR_API_KEY }}
+      run: python collect_korea_total.py
+
     - name: 🚀 Commit & Push
       run: |
         git config user.name "github-actions[bot]"

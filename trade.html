@@ -358,7 +358,7 @@ function rMain(){charts.forEach(c=>c.destroy());charts=[];const el=document.getE
 
 function rOverview(el){
   const I=D.items||{},M=D.main_items||[],T=D.total||{};const months=ks(T.exp||{});
-  let h='<div class="st"><span class="d"></span>전체 수출입 추이 (HS2 96개 전품목)</div><div class="cg"><div class="cb"><h4>전체 수출 / 수입</h4><canvas id="ot"></canvas></div><div class="cb"><h4>무역수지</h4><canvas id="ob"></canvas></div></div>';
+  let h='<div class="st"><span class="d"></span>한국 전체 수출입 추이 (HS2 99개 챕터 합산)</div><div class="cg"><div class="cb"><h4>전체 수출 / 수입</h4><canvas id="ot"></canvas></div><div class="cb"><h4>무역수지</h4><canvas id="ob"></canvas></div></div>';
   h+='<div class="st"><span class="d"></span>주요 품목 수출 비교</div><div class="cg"><div class="cb w"><h4>월별 수출액 비교</h4><canvas id="oc"></canvas></div></div>';
   const rm=months.slice(-6);const rr=[...rm].reverse();
   h+='<div class="st"><span class="d"></span>주요 품목 실적 요약</div><div class="ts"><table class="dt"><thead><tr><th>#</th><th>품목</th>';rr.forEach((m,j)=>h+=`<th${j===0?' style="color:var(--t1)"':''}>${fy(m)} 수출</th>`);h+='<th>수입</th><th>수지</th><th>MoM</th><th>YoY</th></tr></thead><tbody>';

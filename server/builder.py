@@ -6,14 +6,17 @@ from .database import get_connection
 from .config import BASE_DIR
 
 
-def _load_ranking_from_json():
-    """ranking_6d는 trade_data_v2.json에서 직접 읽음 (db 100MB 한도 회피)"""
+def _load_json_overrides():
+    """trade_data_v2.json 머지용 overrides:
+    - ranking_6d: db에 두면 100MB 한도 초과
+    - total: customs_trade_v2.py가 16개 품목 합으로 덮어쓰는 걸 collect_korea_total.py 결과로 우선
+    """
     p = os.path.join(BASE_DIR, "trade_data_v2.json")
     if not os.path.exists(p):
         return {}
     try:
         with open(p, "r", encoding="utf-8") as f:
-            return json.load(f).get("ranking_6d", {})
+            return json.load(f)
     except Exception:
         return {}
 
@@ -53,12 +56,19 @@ def build_full_json() -> dict:
     }
 
     # ── 3) 전체 총계 ──
-    total_exp, total_imp = {}, {}
-    for r in conn.execute(
-            "SELECT ym, exp_usd, imp_usd FROM trade_data WHERE data_type='total'"):
-        total_exp[r["ym"]] = r["exp_usd"]
-        total_imp[r["ym"]] = r["imp_usd"]
-    result["total"] = {"exp": total_exp, "imp": total_imp}
+    # JSON override 우선 (collect_korea_total.py가 한국 전체 99 HS2 합으로 갱신)
+    # 없으면 db trade_data='total' 폴백 (구버전: 16개 모니터링 품목 합)
+    _json_overrides = _load_json_overrides()
+    _jt = _json_overrides.get("total")
+    if _jt and (_jt.get("exp") or _jt.get("imp")):
+        result["total"] = _jt
+    else:
+        total_exp, total_imp = {}, {}
+        for r in conn.execute(
+                "SELECT ym, exp_usd, imp_usd FROM trade_data WHERE data_type='total'"):
+            total_exp[r["ym"]] = r["exp_usd"]
+            total_imp[r["ym"]] = r["imp_usd"]
+        result["total"] = {"exp": total_exp, "imp": total_imp}
 
     # ── 4) 품목 데이터 ──
     # 모든 trade_data를 한번에 읽어 메모리에서 분류 (쿼리 횟수 최소화)
@@ -187,7 +197,7 @@ def build_full_json() -> dict:
     # ── 5) 랭킹 ──
     # ranking_6d는 collect_ranking.py가 만든 trade_data_v2.json에서 머지
     # (1.3M 행이라 db에 두면 100MB 초과; countries + wgt 포함)
-    result["ranking_6d"] = _load_ranking_from_json()
+    result["ranking_6d"] = _json_overrides.get("ranking_6d", {})
 
     conn.close()
     return result
