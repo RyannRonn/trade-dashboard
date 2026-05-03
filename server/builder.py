@@ -1,7 +1,21 @@
 """DB에서 trade.html이 기대하는 JSON 구조 재조립"""
 import json
+import os
 from collections import defaultdict
 from .database import get_connection
+from .config import BASE_DIR
+
+
+def _load_ranking_from_json():
+    """ranking_6d는 trade_data_v2.json에서 직접 읽음 (db 100MB 한도 회피)"""
+    p = os.path.join(BASE_DIR, "trade_data_v2.json")
+    if not os.path.exists(p):
+        return {}
+    try:
+        with open(p, "r", encoding="utf-8") as f:
+            return json.load(f).get("ranking_6d", {})
+    except Exception:
+        return {}
 
 
 def build_full_json() -> dict:
@@ -171,19 +185,9 @@ def build_full_json() -> dict:
     result["items"] = items_dict
 
     # ── 5) 랭킹 ──
-    # hs6 이름 사전
-    hs6_names = {}
-    for r in conn.execute("SELECT hs_code, name FROM hs_names WHERE digits=6"):
-        hs6_names[r["hs_code"]] = r["name"]
-
-    ranking = defaultdict(lambda: {"name": "", "exp": {}})
-    for r in conn.execute(
-            "SELECT sub_code, ym, exp_usd FROM trade_data WHERE data_type='ranking'"):
-        hs6 = r["sub_code"]
-        ranking[hs6]["exp"][r["ym"]] = r["exp_usd"]
-    for hs6 in ranking:
-        ranking[hs6]["name"] = hs6_names.get(hs6, "")
-    result["ranking_6d"] = dict(ranking)
+    # ranking_6d는 collect_ranking.py가 만든 trade_data_v2.json에서 머지
+    # (1.3M 행이라 db에 두면 100MB 초과; countries + wgt 포함)
+    result["ranking_6d"] = _load_ranking_from_json()
 
     conn.close()
     return result

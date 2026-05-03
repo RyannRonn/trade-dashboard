@@ -80,6 +80,22 @@ table.dt tr.ck{cursor:pointer}table.dt tr.ck:hover{background:rgba(77,159,255,.0
 .bbtn:hover{border-color:var(--bl);color:var(--bl)}
 .ftr{padding:12px 24px;border-top:1px solid var(--bd);font-size:9px;color:var(--t4);display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px}
 .loading-bar{position:fixed;top:0;left:0;height:2px;background:var(--bl);transition:width .3s;z-index:999;box-shadow:0 0 8px var(--bl)}
+.srch-bar{padding:8px 24px;border-bottom:1px solid var(--bd);position:relative;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.srch-bar input{flex:0 0 320px;max-width:100%;padding:7px 12px;border:1px solid var(--bd);border-radius:6px;background:var(--bg2);color:var(--t1);font-family:"Fira Code",monospace;font-size:12px}
+.srch-bar input:focus{outline:none;border-color:var(--bl)}
+.srch-bar .srch-hint{font-size:10px;color:var(--t4);font-family:"Fira Code"}
+.srch-drop{position:absolute;top:46px;left:24px;width:380px;max-width:calc(100% - 48px);background:var(--bg2);border:1px solid var(--bd);border-radius:6px;max-height:340px;overflow-y:auto;z-index:50;display:none;box-shadow:0 4px 18px rgba(0,0,0,.5)}
+.srch-drop.show{display:block}
+.srch-item{padding:7px 10px;cursor:pointer;border-bottom:1px solid rgba(26,36,54,.6);display:flex;align-items:center;gap:10px}
+.srch-item:last-child{border-bottom:none}
+.srch-item:hover,.srch-item.hi{background:rgba(77,159,255,.08)}
+.srch-item .si-hs{font-family:"Fira Code";font-size:11px;color:var(--t3);min-width:62px}
+.srch-item .si-name{font-size:12px;color:var(--t1);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:"Noto Sans KR"}
+.srch-item .si-tag{font-size:9px;padding:1px 6px;border-radius:3px;font-family:"Fira Code";font-weight:600}
+.srch-item .si-tag.t-item{color:var(--bl);background:var(--bl-g)}
+.srch-item .si-tag.t-rank{color:var(--am);background:rgba(232,168,48,.08)}
+.tab .tab-x{margin-left:6px;color:var(--t4);font-size:11px;padding:0 3px;border-radius:3px}
+.tab .tab-x:hover{color:var(--rd);background:rgba(239,95,95,.1)}
 </style>
 </head>
 <body>
@@ -110,6 +126,12 @@ table.dt tr.ck{cursor:pointer}table.dt tr.ck:hover{background:rgba(77,159,255,.0
 </div>
 
 <div class="kbar" id="kpi"></div>
+<div class="srch-bar">
+<input type="text" id="srchInput" placeholder="HS 코드(2~6자리) 또는 품목명 검색…" autocomplete="off">
+<button class="bbtn" onclick="searchSubmit()">검색</button>
+<span class="srch-hint">예: 8541 / 854143 / 화장품 / 반도체</span>
+<div class="srch-drop" id="srchDrop"></div>
+</div>
 <div class="tw"><div class="tabs" id="tabs"></div></div>
 <div class="cnt" id="main"></div>
 <div class="ftr"><span>💡 API: 품목별국가별 수출입실적 + 시군구별 품목별 수출입실적 · 금액: USD</span><span>Source: 관세청 (data.go.kr)</span></div>
@@ -124,6 +146,8 @@ const DEMO={"generated_at":"2026-04-17 08:50:54","period":{"start":"202503","end
 // ===== STATE =====
 let D=DEMO; // active data
 let tab="overview",charts=[],itemSub="country",rankSort="yoy",isLive=false;
+let selSearch=null;
+let SEARCH_INDEX=[];
 
 Chart.defaults.color="#a4b2c8";Chart.defaults.borderColor="rgba(26,36,54,.5)";
 Chart.defaults.font.family="'Fira Code',monospace";Chart.defaults.font.size=10;
@@ -315,19 +339,22 @@ if(savedKey)document.getElementById("apiKeyInput").value=savedKey;
 document.getElementById("dt").textContent=D.generated_at;
 document.getElementById("modeBadge").textContent=isLive?"LIVE":"DEMO";
 document.getElementById("modeBadge").className=isLive?"abg":"abg demo";
+buildSearchIndex();
+setupSearch();
 
 function refresh(){
   document.getElementById("dt").textContent=D.generated_at;
   document.getElementById("modeBadge").textContent=isLive?"LIVE":"DEMO";
   document.getElementById("modeBadge").className=isLive?"abg":"abg demo";
+  buildSearchIndex();
   rKPI();rTabs();rMain();
 }
 
 // ===== RENDER (same as before) =====
 function rKPI(){const I=D.items||{},M=D.main_items||[];let h="";for(const hs of M){const d=I[hs];if(!d)continue;const lm=lt(d.total_exp);if(!lm)continue;h+=`<div class="kpi" onclick="goTab('${hs}')"><div class="kl">${d.name} (${fy(lm)})</div><div class="kv">${fn(d.total_exp[lm])}</div><div class="kc">${ch(mom(d.total_exp,lm),"M ")} ${ch(yoy(d.total_exp,lm),"Y ")}</div></div>`}document.getElementById("kpi").innerHTML=h}
-function rTabs(){const I=D.items||{},M=D.main_items||[];let h=`<button class="tab ${tab==="overview"?"on":""}" onclick="goTab('overview')">📊 총괄</button><button class="tab ${tab==="ranking"?"on":""}" onclick="goTab('ranking')">🔥 급등/급락</button>`;for(const hs of M){const d=I[hs];if(d)h+=`<button class="tab ${tab===hs?"on":""}" onclick="goTab('${hs}')">${d.name}</button>`}document.getElementById("tabs").innerHTML=h}
+function rTabs(){const I=D.items||{},M=D.main_items||[];let h=`<button class="tab ${tab==="overview"?"on":""}" onclick="goTab('overview')">📊 총괄</button><button class="tab ${tab==="ranking"?"on":""}" onclick="goTab('ranking')">🔥 급등/급락</button>`;for(const hs of M){const d=I[hs];if(d)h+=`<button class="tab ${tab===hs?"on":""}" onclick="goTab('${hs}')">${d.name}</button>`}if(selSearch){const r=I[selSearch]||(D.ranking_6d||{})[selSearch];const nm=r&&r.name?r.name:(D.hs4_names||{})[selSearch]||"";const lbl=nm?`${selSearch} · ${nm}`:selSearch;h+=`<button class="tab ${tab==="search"?"on":""}" onclick="goTab('search')">🔍 ${lbl}<span class="tab-x" onclick="event.stopPropagation();searchClose()">✕</span></button>`}document.getElementById("tabs").innerHTML=h}
 function goTab(t){tab=t;itemSub="country";rTabs();rMain()}
-function rMain(){charts.forEach(c=>c.destroy());charts=[];const el=document.getElementById("main");if(tab==="overview")rOverview(el);else if(tab==="ranking")rRanking(el);else rItem(el,tab)}
+function rMain(){charts.forEach(c=>c.destroy());charts=[];const el=document.getElementById("main");if(tab==="overview")rOverview(el);else if(tab==="ranking")rRanking(el);else if(tab==="search")rSearch(el,selSearch);else rItem(el,tab)}
 
 function rOverview(el){
   const I=D.items||{},M=D.main_items||[],T=D.total||{};const months=ks(T.exp||{});
@@ -540,6 +567,264 @@ function rItemSubs(el,d,hs){
   el.innerHTML=h;
   mkBarPrice("ic1",months,sel.exp,sel.wgt);
   setTimeout(()=>{chartEntries.forEach(([k,v],i)=>{mkBarPrice("sc_"+i,months,v.exp,v.wgt,"rgba(45,212,191,.3)")})},50);
+}
+
+// ===== HS 검색 =====
+function buildSearchIndex(){
+  SEARCH_INDEX=[];
+  const seen=new Set();
+  for(const[hs,d]of Object.entries(D.items||{})){
+    SEARCH_INDEX.push({hs,name:d.name||"",type:"item"});
+    seen.add(hs);
+  }
+  const hs4FromRank=new Set();
+  for(const[hs,d]of Object.entries(D.ranking_6d||{})){
+    if(!seen.has(hs)){
+      SEARCH_INDEX.push({hs,name:d.name||"",type:"rank"});
+      seen.add(hs);
+    }
+    if(/^\d{6}$/.test(hs))hs4FromRank.add(hs.slice(0,4));
+  }
+  const N4=D.hs4_names||{};
+  for(const hs4 of hs4FromRank){
+    if(seen.has(hs4))continue;
+    SEARCH_INDEX.push({hs:hs4,name:N4[hs4]||"",type:"rank"});
+    seen.add(hs4);
+  }
+}
+function searchHS(q){
+  q=(q||"").trim();
+  if(!q)return[];
+  const lq=q.toLowerCase();
+  const isNum=/^\d+$/.test(q);
+  const out=[];
+  for(const r of SEARCH_INDEX){
+    let score=-1;
+    if(isNum){
+      if(r.hs.startsWith(q))score=100-Math.abs(r.hs.length-q.length);
+    }else{
+      const nm=(r.name||"").toLowerCase();
+      if(nm&&nm.includes(lq))score=nm.startsWith(lq)?90:50;
+    }
+    if(score>=0)out.push({...r,score});
+  }
+  out.sort((a,b)=>b.score-a.score||a.hs.length-b.hs.length||a.hs.localeCompare(b.hs));
+  return out.slice(0,12);
+}
+function searchGo(hs){
+  hs=(hs||"").toString().trim();
+  if(!hs)return;
+  selSearch=hs;
+  tab="search";
+  const inp=document.getElementById("srchInput");
+  if(inp)inp.value=hs;
+  const drop=document.getElementById("srchDrop");
+  if(drop){drop.classList.remove("show");drop.innerHTML="";}
+  rTabs();rMain();
+}
+function searchClose(){
+  selSearch=null;
+  if(tab==="search")tab="overview";
+  const inp=document.getElementById("srchInput");
+  if(inp)inp.value="";
+  rTabs();rMain();
+}
+function searchSubmit(){
+  const inp=document.getElementById("srchInput");
+  if(!inp)return;
+  const q=(inp.value||"").trim();
+  if(!q)return;
+  if(/^[A-Z0-9]{2,10}$/i.test(q)){searchGo(q.toUpperCase());return;}
+  const r=searchHS(q);
+  if(r.length)searchGo(r[0].hs);
+}
+function setupSearch(){
+  const inp=document.getElementById("srchInput");
+  const drop=document.getElementById("srchDrop");
+  if(!inp||!drop)return;
+  let hi=-1;
+  function render(){
+    const res=searchHS(inp.value);
+    hi=res.length?0:-1;
+    if(!res.length){drop.classList.remove("show");drop.innerHTML="";return;}
+    drop.innerHTML=res.map((r,i)=>`<div class="srch-item ${i===hi?"hi":""}" data-hs="${r.hs}"><span class="si-hs">${r.hs}</span><span class="si-name">${(r.name||"").replace(/</g,"&lt;")||"(이름 없음)"}</span><span class="si-tag t-${r.type}">${r.type==="item"?"품목":"HS6"}</span></div>`).join("");
+    drop.classList.add("show");
+    drop.querySelectorAll(".srch-item").forEach(el=>{el.onmousedown=e=>{e.preventDefault();searchGo(el.dataset.hs);}});
+  }
+  inp.addEventListener("input",render);
+  inp.addEventListener("focus",render);
+  inp.addEventListener("blur",()=>setTimeout(()=>drop.classList.remove("show"),120));
+  inp.addEventListener("keydown",e=>{
+    const items=drop.querySelectorAll(".srch-item");
+    if(e.key==="Enter"){e.preventDefault();if(hi>=0&&items[hi])searchGo(items[hi].dataset.hs);else searchSubmit();}
+    else if(e.key==="ArrowDown"){e.preventDefault();if(items.length){if(hi>=0)items[hi].classList.remove("hi");hi=Math.min(hi+1,items.length-1);items[hi].classList.add("hi");items[hi].scrollIntoView({block:"nearest"});}}
+    else if(e.key==="ArrowUp"){e.preventDefault();if(items.length){if(hi>=0)items[hi].classList.remove("hi");hi=Math.max(hi-1,0);items[hi].classList.add("hi");items[hi].scrollIntoView({block:"nearest"});}}
+    else if(e.key==="Escape"){drop.classList.remove("show");inp.blur();}
+  });
+}
+function rSearch(el,hs){
+  if(!hs){el.innerHTML='<div style="text-align:center;padding:50px;color:var(--t4)">검색창에 HS 코드 또는 품목명을 입력하세요.</div>';return;}
+  if(D.items&&D.items[hs])return rItem(el,hs);
+  const r6=(D.ranking_6d||{})[hs];
+  if(r6)return rSearchHS6(el,hs,r6);
+  if(/^\d{2,5}$/.test(hs)){
+    const subs=Object.entries(D.ranking_6d||{}).filter(([k])=>k.startsWith(hs));
+    if(subs.length)return rSearchHSAgg(el,hs,subs);
+  }
+  el.innerHTML=`<div style="text-align:center;padding:50px;color:var(--t4)">HS <span class="mono" style="color:var(--t1)">${hs}</span>에 대한 캐시 데이터 없음.<br><span style="font-size:11px;display:block;margin-top:10px">2~6자리 HS 또는 등록된 품목명을 시도해 보세요.</span></div>`;
+}
+function rSearchHS6(el,hs,d){
+  const exp=d.exp||{};
+  const wgt=d.wgt||{};
+  const hasWgt=Object.values(wgt).some(v=>v>0);
+  const ppk=m=>{const w=wgt[m]||0;const e=exp[m]||0;return w>0?e/w:null;};
+  const months=ks(exp);
+  const lm=lt(exp);
+  const N4=D.hs4_names||{};const N2=D.hs2_names||{};
+  const hs4=hs.slice(0,4);const hs2=hs.slice(0,2);
+  let h=`<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+    <span style="font-size:18px;font-weight:900">${d.name||hs}</span>
+    <span class="mono" style="color:var(--t4);font-size:12px">HS ${hs}</span>
+    ${N4[hs4]?`<span class="mono" style="color:var(--t4);font-size:11px">· ${N4[hs4]}</span>`:""}
+    ${N2[hs2]?`<span class="mono" style="color:var(--t4);font-size:11px">· ${N2[hs2]}</span>`:""}
+  </div>`;
+  if(!lm){el.innerHTML=h+'<div style="text-align:center;padding:30px;color:var(--t4)">데이터 없음</div>';return;}
+  const ppkLm=ppk(lm);
+  h+=`<div style="margin-bottom:14px"><span class="mono" style="font-size:13px">최신 ${fy(lm)}: <strong style="color:var(--t1)">${fn(exp[lm])}</strong> &nbsp; ${ch(mom(exp,lm),"MoM ")} &nbsp; ${ch(yoy(exp,lm),"YoY ")}${ppkLm!=null?` &nbsp; · 단가 <strong style="color:var(--t1)">${ppkLm.toFixed(2)}</strong> USD/kg`:""}</span></div>`;
+  h+='<div class="cg"><div class="cb w"><h4>월별 수출액 (USD) + YoY (%)</h4><canvas id="srch_chart"></canvas></div></div>';
+  if(hasWgt){h+='<div class="cg"><div class="cb w"><h4>월별 단가 (USD/kg) + 중량 (kg)</h4><canvas id="srch_chart_pp"></canvas></div></div>';}
+  const rm=months.slice(-14);
+  const rr=[...rm].reverse();
+  h+='<div class="ts"><table class="dt"><thead><tr><th>#</th><th>연월</th><th>수출액 (USD)</th>'+(hasWgt?'<th>중량 (kg)</th><th>단가 (USD/kg)</th>':'')+'<th>MoM</th><th>YoY</th></tr></thead><tbody>';
+  rr.forEach((m,i)=>{const pp=ppk(m);h+=`<tr><td>${i+1}</td><td>${fy(m)}</td><td style="color:var(--t1)">${fn(exp[m]||0)}</td>${hasWgt?`<td>${fn(wgt[m]||0)}</td><td>${pp!=null?pp.toFixed(2):"-"}</td>`:""}<td>${chB(mom(exp,m))}</td><td>${chB(yoy(exp,m))}</td></tr>`;});
+  h+='</tbody></table></div>';
+
+  // 국가별 (있으면)
+  const cmap=d.countries||{};
+  const cKeys=Object.keys(cmap);
+  let topCountries=[];
+  if(cKeys.length){
+    const ranked=cKeys.map(cd=>{const ce=cmap[cd].exp||{};return{cd,name:cmap[cd].name||cd,exp:ce,lv:ce[lm]||0,mom:mom(ce,lm),yoy:yoy(ce,lm)};}).sort((a,b)=>b.lv-a.lv);
+    topCountries=ranked.slice(0,6);
+    h+=`<div class="st"><span class="d" style="background:var(--cy)"></span>국가별 (${cKeys.length}개국, ${fy(lm)} 기준 정렬)</div>`;
+    h+='<div class="cg">';
+    topCountries.forEach((r,i)=>{h+=`<div class="cb"><h4>${r.name} <span class="mono" style="color:var(--t4);font-size:10px">${r.cd}</span></h4><canvas id="srch_c_${i}"></canvas></div>`;});
+    h+='</div>';
+    const cRm=rm;
+    const cRr=[...cRm].reverse();
+    h+='<div class="ts"><table class="dt"><thead><tr><th>#</th><th style="text-align:left">국가</th>';
+    cRr.slice(0,5).forEach((m,j)=>h+=`<th${j===0?' style="color:var(--t1)"':''}>${fy(m)}</th>`);
+    h+='<th>MoM</th><th>YoY</th></tr></thead><tbody>';
+    ranked.forEach((r,i)=>{
+      h+=`<tr><td>${i+1}</td><td style="text-align:left;font-family:Noto Sans KR">${r.name} <span class="mono" style="color:var(--t4);font-size:10px">${r.cd}</span></td>`;
+      cRr.slice(0,5).forEach((m,j)=>h+=`<td${j===0?' style="color:var(--t1)"':''}>${fn(r.exp[m]||0)}</td>`);
+      h+=`<td>${chB(r.mom)}</td><td>${chB(r.yoy)}</td></tr>`;
+    });
+    h+='</tbody></table></div>';
+  }
+
+  el.innerHTML=h;
+  const ctx=document.getElementById("srch_chart");
+  if(ctx){
+    const yoyArr=rm.map(m=>yoy(exp,m));
+    charts.push(new Chart(ctx,{type:"bar",data:{
+      labels:rm.map(fy),
+      datasets:[
+        {type:"bar",label:"수출(USD)",data:rm.map(m=>exp[m]||0),backgroundColor:"rgba(77,159,255,.35)",borderColor:"#4d9fff",borderWidth:1,borderRadius:3,yAxisID:"y"},
+        {type:"line",label:"YoY (%)",data:yoyArr,borderColor:"#22d3ee",backgroundColor:"rgba(34,211,238,.1)",borderWidth:2,tension:.3,pointRadius:2.5,yAxisID:"y1",spanGaps:true}
+      ]
+    },options:{
+      responsive:true,interaction:{mode:"index",intersect:false},
+      plugins:{legend:{labels:{boxWidth:10,color:"#c8d4e6",font:{size:10}}},tooltip:{mode:"index",intersect:false,callbacks:{label:c=>c.dataset.yAxisID==="y1"?(c.parsed.y!=null?"YoY: "+c.parsed.y.toFixed(1)+"%":""):c.dataset.label+": "+fn(c.parsed.y)}}},
+      scales:{
+        y:{position:"left",ticks:{callback:v=>fn(v),color:"#a4b2c8"},grid:{color:"rgba(255,255,255,.04)"}},
+        y1:{position:"right",grid:{display:false},ticks:{callback:v=>v.toFixed(0)+"%",color:"#a4b2c8"}},
+        x:{grid:{display:false},ticks:{color:"#8898b0"}}
+      }
+    }}));
+  }
+  // 단가 차트 (USD/kg) + 중량
+  if(hasWgt){
+    const ppctx=document.getElementById("srch_chart_pp");
+    if(ppctx){
+      charts.push(new Chart(ppctx,{type:"bar",data:{
+        labels:rm.map(fy),
+        datasets:[
+          {type:"bar",label:"중량(kg)",data:rm.map(m=>wgt[m]||0),backgroundColor:"rgba(168,85,247,.3)",borderColor:"#a855f7",borderWidth:1,borderRadius:3,yAxisID:"y"},
+          {type:"line",label:"단가(USD/kg)",data:rm.map(m=>ppk(m)),borderColor:"#fbbf24",backgroundColor:"rgba(251,191,36,.1)",borderWidth:2,tension:.3,pointRadius:2.5,yAxisID:"y1",spanGaps:true}
+        ]
+      },options:{
+        responsive:true,interaction:{mode:"index",intersect:false},
+        plugins:{legend:{labels:{boxWidth:10,color:"#c8d4e6",font:{size:10}}},tooltip:{mode:"index",intersect:false,callbacks:{label:c=>c.dataset.yAxisID==="y1"?(c.parsed.y!=null?"단가: "+c.parsed.y.toFixed(2)+" USD/kg":""):c.dataset.label+": "+fn(c.parsed.y)}}},
+        scales:{
+          y:{position:"left",ticks:{callback:v=>fn(v),color:"#a4b2c8"},grid:{color:"rgba(255,255,255,.04)"}},
+          y1:{position:"right",grid:{display:false},ticks:{callback:v=>v?.toFixed(2),color:"#a4b2c8"}},
+          x:{grid:{display:false},ticks:{color:"#8898b0"}}
+        }
+      }}));
+    }
+  }
+  // 국가별 작은 차트
+  topCountries.forEach((r,i)=>{
+    const cctx=document.getElementById("srch_c_"+i);
+    if(!cctx)return;
+    charts.push(new Chart(cctx,{type:"bar",data:{
+      labels:rm.map(fy),
+      datasets:[
+        {type:"bar",label:"수출(USD)",data:rm.map(m=>r.exp[m]||0),backgroundColor:"rgba(34,211,238,.3)",borderColor:"#22d3ee",borderWidth:1,borderRadius:3,yAxisID:"y"},
+        {type:"line",label:"YoY (%)",data:rm.map(m=>yoy(r.exp,m)),borderColor:"#ef5f5f",borderWidth:1.5,tension:.3,pointRadius:1.5,yAxisID:"y1",spanGaps:true}
+      ]
+    },options:{
+      responsive:true,interaction:{mode:"index",intersect:false},
+      plugins:{legend:{display:false}},
+      scales:{
+        y:{position:"left",ticks:{callback:v=>fn(v),color:"#a4b2c8",font:{size:9}}},
+        y1:{position:"right",grid:{display:false},ticks:{callback:v=>v?.toFixed(0)+"%",color:"#a4b2c8",font:{size:9}}},
+        x:{grid:{display:false},ticks:{color:"#8898b0",font:{size:8}}}
+      }
+    }}));
+  });
+}
+function rSearchHSAgg(el,hs,subs){
+  const N4=D.hs4_names||{};const N2=D.hs2_names||{};
+  const hs2=hs.slice(0,2);
+  const name=(hs.length===4?N4[hs]:"")||(hs.length===2?N2[hs]:"")||`HS ${hs}`;
+  const agg={};
+  for(const[,d]of subs){for(const[m,v]of Object.entries(d.exp||{})){agg[m]=(agg[m]||0)+(v||0);}}
+  const months=ks(agg);
+  const lm=lt(agg);
+  let h=`<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+    <span style="font-size:18px;font-weight:900">${name}</span>
+    <span class="mono" style="color:var(--t4);font-size:12px">HS ${hs} · 하위 6자리 ${subs.length}개 합산</span>
+    ${N2[hs2]&&hs.length>=4?`<span class="mono" style="color:var(--t4);font-size:11px">· ${N2[hs2]}</span>`:""}
+  </div>`;
+  if(!lm){el.innerHTML=h+'<div style="text-align:center;padding:30px;color:var(--t4)">데이터 없음</div>';return;}
+  h+=`<div style="margin-bottom:14px"><span class="mono" style="font-size:13px">최신 ${fy(lm)}: <strong style="color:var(--t1)">${fn(agg[lm])}</strong> &nbsp; ${ch(mom(agg,lm),"MoM ")} &nbsp; ${ch(yoy(agg,lm),"YoY ")}</span></div>`;
+  h+='<div class="cg"><div class="cb w"><h4>월별 수출액 합계 (USD) + YoY (%)</h4><canvas id="srch_chart"></canvas></div></div>';
+  const ranked=subs.map(([k,d])=>{const e=d.exp||{};return{hs:k,name:d.name||k,lv:e[lm]||0,mom:mom(e,lm),yoy:yoy(e,lm)};}).sort((a,b)=>b.lv-a.lv);
+  h+=`<div class="st"><span class="d" style="background:var(--cy)"></span>하위 6자리 HS · ${ranked.length}개 (클릭하여 상세)</div>`;
+  h+='<div class="ts"><table class="dt"><thead><tr><th>#</th><th style="text-align:left">HS</th><th style="text-align:left">품목</th><th>최신 수출액</th><th>MoM</th><th>YoY</th></tr></thead><tbody>';
+  ranked.forEach((r,i)=>{h+=`<tr class="ck" onclick="searchGo('${r.hs}')"><td>${i+1}</td><td class="mono" style="text-align:left;color:var(--t3)">${r.hs}</td><td style="text-align:left;font-family:Noto Sans KR">${(r.name||"").replace(/</g,"&lt;")||"(이름 없음)"}</td><td style="color:var(--t1)">${fn(r.lv)}</td><td>${chB(r.mom)}</td><td>${chB(r.yoy)}</td></tr>`;});
+  h+='</tbody></table></div>';
+  el.innerHTML=h;
+  const ctx=document.getElementById("srch_chart");
+  if(!ctx)return;
+  const rm=months.slice(-14);
+  charts.push(new Chart(ctx,{type:"bar",data:{
+    labels:rm.map(fy),
+    datasets:[
+      {type:"bar",label:"수출 합계",data:rm.map(m=>agg[m]||0),backgroundColor:"rgba(77,159,255,.35)",borderColor:"#4d9fff",borderWidth:1,borderRadius:3,yAxisID:"y"},
+      {type:"line",label:"YoY (%)",data:rm.map(m=>yoy(agg,m)),borderColor:"#22d3ee",backgroundColor:"rgba(34,211,238,.1)",borderWidth:2,tension:.3,pointRadius:2.5,yAxisID:"y1",spanGaps:true}
+    ]
+  },options:{
+    responsive:true,interaction:{mode:"index",intersect:false},
+    plugins:{legend:{labels:{boxWidth:10,color:"#c8d4e6",font:{size:10}}}},
+    scales:{
+      y:{position:"left",ticks:{callback:v=>fn(v),color:"#a4b2c8"}},
+      y1:{position:"right",grid:{display:false},ticks:{callback:v=>v.toFixed(0)+"%",color:"#a4b2c8"}},
+      x:{grid:{display:false},ticks:{color:"#8898b0"}}
+    }
+  }}));
 }
 
 function mkItemHeader(d,hs){
