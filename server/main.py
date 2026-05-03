@@ -46,6 +46,23 @@ async def index():
     return FileResponse(os.path.join(BASE_DIR, "trade.html"))
 
 
+@app.get("/provisional.html")
+async def provisional_page():
+    return FileResponse(os.path.join(BASE_DIR, "provisional.html"))
+
+
+@app.get("/provisional_data.json")
+async def provisional_data():
+    return FileResponse(os.path.join(BASE_DIR, "provisional_data.json"),
+                        media_type="application/json")
+
+
+@app.get("/business_days.json")
+async def business_days():
+    return FileResponse(os.path.join(BASE_DIR, "business_days.json"),
+                        media_type="application/json")
+
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
