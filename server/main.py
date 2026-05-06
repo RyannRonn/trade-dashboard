@@ -68,6 +68,18 @@ async def business_days():
                         media_type="application/json")
 
 
+@app.get("/static/{name}")
+async def static_file(name: str):
+    """국가 메타·세계 GeoJSON 등 정적 자산 (지도 시각화용)."""
+    if "/" in name or ".." in name:
+        return JSONResponse({"error": "invalid"}, status_code=400)
+    path = os.path.join(BASE_DIR, "static", name)
+    if not os.path.exists(path):
+        return JSONResponse({"error": "not found"}, status_code=404)
+    media = "application/json" if name.endswith(".json") else None
+    return FileResponse(path, media_type=media)
+
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))

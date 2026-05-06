@@ -94,8 +94,35 @@ table.dt tr.ck{cursor:pointer}table.dt tr.ck:hover{background:rgba(77,159,255,.0
 .srch-item .si-tag{font-size:9px;padding:1px 6px;border-radius:3px;font-family:"Fira Code";font-weight:600}
 .srch-item .si-tag.t-item{color:var(--bl);background:var(--bl-g)}
 .srch-item .si-tag.t-rank{color:var(--am);background:rgba(232,168,48,.08)}
+.srch-item .si-tag.t-country{color:var(--gn);background:var(--gn-g)}
 .tab .tab-x{margin-left:6px;color:var(--t4);font-size:11px;padding:0 3px;border-radius:3px}
 .tab .tab-x:hover{color:var(--rd);background:rgba(239,95,95,.1)}
+.cs-hd{display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+.cs-sw{position:relative;flex:1;min-width:280px;max-width:520px}
+.cs-in{width:100%;padding:8px 12px;border:1px solid var(--bd);border-radius:6px;background:var(--bg2);color:var(--t1);font-family:"Fira Code",monospace;font-size:12px;box-sizing:border-box}
+.cs-in:focus{outline:none;border-color:var(--cy)}
+.cs-in.err{border-color:var(--rd);animation:cshake .3s}
+@keyframes cshake{0%,100%{transform:translateX(0)}25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}
+.cs-sw .srch-drop{position:absolute;top:38px;left:0;width:100%;max-width:100%}
+.cs-clr{padding:7px 12px;border:1px solid rgba(232,168,48,.4);background:rgba(232,168,48,.08);color:#e8a830;border-radius:6px;font-size:11px;font-family:"Fira Code";cursor:pointer}
+.cs-clr:hover{background:rgba(232,168,48,.16)}
+.map3d{position:relative;background:radial-gradient(ellipse at 50% 40%,#0c1626 0%,#060a11 85%);border:1px solid var(--bd);border-radius:8px;margin-bottom:16px;overflow:hidden}
+.map3d-svg{width:100%;height:auto;display:block}
+.map3d-cap{position:absolute;top:8px;left:12px;font-size:10.5px;color:var(--t3);font-family:"Fira Code",monospace;pointer-events:none;letter-spacing:.2px}
+.map3d-cap b{color:var(--cy);font-weight:600}
+.map3d-leg{position:absolute;bottom:8px;right:12px;font-size:9.5px;color:var(--t4);font-family:"Fira Code",monospace;pointer-events:none}
+.map3d-leg .lg-bar{display:inline-block;width:64px;height:5px;background:linear-gradient(90deg,hsl(145,58%,8%),hsl(154,73%,44%),hsl(163,88%,80%));border-radius:2px;vertical-align:middle;margin:0 5px}
+.map3d-status{padding:60px 20px;text-align:center;color:var(--t4);font-size:12px}
+.map3d-land{stroke:#2a3a55;stroke-width:.4;stroke-linejoin:round}
+.map3d-c{cursor:pointer;transition:filter .12s,stroke .12s}
+.map3d-c:hover{filter:brightness(1.45);stroke:var(--cy);stroke-width:.8}
+.map3d-c.no-data{cursor:default;fill:#101828}
+.map3d-c.no-data:hover{filter:none;stroke:#2a3a55;stroke-width:.4}
+.map3d-tt{position:absolute;pointer-events:none;background:rgba(8,12,20,.96);border:1px solid var(--bd);border-radius:6px;padding:7px 11px;font-family:"Fira Code",monospace;color:var(--t1);z-index:10;display:none;white-space:nowrap;box-shadow:0 4px 18px rgba(0,0,0,.55);font-size:11px}
+.map3d-tt.show{display:block}
+.map3d-tt .tt-n{color:var(--cy);font-weight:700;margin-bottom:3px;font-size:12px}
+.map3d-tt .tt-v{color:var(--t1)}
+.map3d-tt .tt-h{color:var(--t4);font-size:10px;margin-top:2px}
 </style>
 </head>
 <body>
@@ -147,8 +174,10 @@ const DEMO={"generated_at":"2026-04-17 08:50:54","period":{"start":"202503","end
 let D=DEMO; // active data
 let tab="overview",charts=[],itemSub="country",rankSort="yoy",isLive=false;
 let selSearch=null;
-let byLocMode="country",byLocSel=null,CINV=null,RINV=null;
+let cSel=null,rSel=null,CINV=null,RINV=null;
+let cFocusHs=null; // null=전체 합산, "330499" 등=특정 HS6 한정
 let SEARCH_INDEX=[];
+let MAP_GEO=null,MAP_META=null,MAP_LOAD=null;
 
 Chart.defaults.color="#a4b2c8";Chart.defaults.borderColor="rgba(26,36,54,.5)";
 Chart.defaults.font.family="'Fira Code',monospace";Chart.defaults.font.size=10;
@@ -354,9 +383,9 @@ function refresh(){
 
 // ===== RENDER (same as before) =====
 function rKPI(){const I=D.items||{},M=D.main_items||[];let h="";for(const hs of M){const d=I[hs];if(!d)continue;const lm=lt(d.total_exp);if(!lm)continue;h+=`<div class="kpi" onclick="goTab('${hs}')"><div class="kl">${d.name} (${fy(lm)})</div><div class="kv">${fn(d.total_exp[lm])}</div><div class="kc">${ch(mom(d.total_exp,lm),"M ")} ${ch(yoy(d.total_exp,lm),"Y ")}</div></div>`}document.getElementById("kpi").innerHTML=h}
-function rTabs(){const I=D.items||{},M=D.main_items||[];let h=`<button class="tab ${tab==="overview"?"on":""}" onclick="goTab('overview')">📊 총괄</button><button class="tab ${tab==="ranking"?"on":""}" onclick="goTab('ranking')">🔥 급등/급락</button><button class="tab ${tab==="byloc"?"on":""}" onclick="goTab('byloc')">🌐 국가/지역별</button>`;for(const hs of M){const d=I[hs];if(d)h+=`<button class="tab ${tab===hs?"on":""}" onclick="goTab('${hs}')">${d.name}</button>`}if(selSearch){const r=I[selSearch]||(D.ranking_6d||{})[selSearch];const nm=r&&r.name?r.name:(D.hs4_names||{})[selSearch]||"";const lbl=nm?`${selSearch} · ${nm}`:selSearch;h+=`<button class="tab ${tab==="search"?"on":""}" onclick="goTab('search')">🔍 ${lbl}<span class="tab-x" onclick="event.stopPropagation();searchClose()">✕</span></button>`}document.getElementById("tabs").innerHTML=h}
+function rTabs(){const I=D.items||{},M=D.main_items||[];let h=`<button class="tab ${tab==="overview"?"on":""}" onclick="goTab('overview')">📊 총괄</button><button class="tab ${tab==="ranking"?"on":""}" onclick="goTab('ranking')">🔥 급등/급락</button><button class="tab ${tab==="country"?"on":""}" onclick="goTab('country')">🌍 국가별</button><button class="tab ${tab==="region"?"on":""}" onclick="goTab('region')">🏭 국내 지역별</button>`;for(const hs of M){const d=I[hs];if(d)h+=`<button class="tab ${tab===hs?"on":""}" onclick="goTab('${hs}')">${d.name}</button>`}if(selSearch){const r=I[selSearch]||(D.ranking_6d||{})[selSearch];const nm=r&&r.name?r.name:(D.hs4_names||{})[selSearch]||"";const lbl=nm?`${selSearch} · ${nm}`:selSearch;h+=`<button class="tab ${tab==="search"?"on":""}" onclick="goTab('search')">🔍 ${lbl}<span class="tab-x" onclick="event.stopPropagation();searchClose()">✕</span></button>`}document.getElementById("tabs").innerHTML=h}
 function goTab(t){tab=t;itemSub="country";rTabs();rMain()}
-function rMain(){charts.forEach(c=>c.destroy());charts=[];const el=document.getElementById("main");if(tab==="overview")rOverview(el);else if(tab==="ranking")rRanking(el);else if(tab==="byloc")rByLoc(el);else if(tab==="search")rSearch(el,selSearch);else rItem(el,tab)}
+function rMain(){charts.forEach(c=>c.destroy());charts=[];const el=document.getElementById("main");if(tab==="overview")rOverview(el);else if(tab==="ranking")rRanking(el);else if(tab==="country")rByCountry(el);else if(tab==="region")rByRegion(el);else if(tab==="search")rSearch(el,selSearch);else rItem(el,tab)}
 
 function rOverview(el){
   const I=D.items||{},M=D.main_items||[],T=D.total||{};const months=ks(T.exp||{});
@@ -430,52 +459,39 @@ function buildRegionIndex(){
   }
   return RINV;
 }
-function rByLoc(el){
-  const isReg=byLocMode==="region";
-  const idx=isReg?buildRegionIndex():buildCountryIndex();
+// 공통: 인덱스 → 정렬된 [{code,name,tot,items}], 선택 보정 후 sel 반환
+function _byLocPrep(idx,curSel){
   let allM=new Set();
   for(const v of Object.values(idx))for(const it of v.items)for(const m of Object.keys(it.exp||{}))allM.add(m);
   const months=[...allM].sort();const lm=months[months.length-1];
-  const locArr=Object.entries(idx).map(([k,v])=>{
+  const arr=Object.entries(idx).map(([k,v])=>{
     let tot=0;for(const it of v.items)tot+=(it.exp[lm]||0);
     return {code:k,name:v.name,tot,items:v.items};
   }).sort((a,b)=>b.tot-a.tot);
-  if(byLocSel&&!idx[byLocSel])byLocSel=null;
-  if(!byLocSel)byLocSel=locArr[0]?.code||null;
-
-  let h=`<div class="st"><span class="d" style="background:var(--cy)"></span>${isReg?"국내 지역":"국가"}별 수출 품목 보기</div>`;
-  h+=`<div class="pills" style="margin-bottom:14px"><button class="pill ${!isReg?"on":""}" onclick="byLocMode='country';byLocSel=null;rMain()">🌍 국가별 (HS6 ${Object.keys(D.ranking_6d||{}).length}개 합산)</button><button class="pill ${isReg?"on":""}" onclick="byLocMode='region';byLocSel=null;rMain()">🏭 국내 지역별 (메인 품목 한정)</button></div>`;
-
-  if(!locArr.length){el.innerHTML=h+`<div style="text-align:center;padding:50px;color:var(--t4)">${isReg?"지역":"국가"} 데이터 없음</div>`;return;}
-
-  h+=`<div class="pills" style="margin-bottom:18px;justify-content:flex-start">`;
-  locArr.forEach(l=>{h+=`<button class="pill ${l.code===byLocSel?"on":""}" onclick="byLocSel='${l.code}';rMain()">${l.name} <span style="opacity:.5;font-weight:400;font-size:10px">${fn(l.tot)}</span></button>`});
-  h+=`</div>`;
-
-  const sel=locArr.find(l=>l.code===byLocSel);
-  if(!sel){el.innerHTML=h;return;}
-
+  if(curSel&&!idx[curSel])curSel=null;
+  if(!curSel)curSel=arr[0]?.code||null;
+  return {arr,sel:arr.find(l=>l.code===curSel)||null,curSel};
+}
+// 공통: sel(picked) → 헤더+표+차트 렌더 (chartId, topId 충돌 방지용 prefix)
+function _byLocBody(h,sel,labelKind,prefix){
   const agg={};
   sel.items.forEach(it=>{for(const[m,v]of Object.entries(it.exp||{}))agg[m]=(agg[m]||0)+(v||0)});
   const aLm=lt(agg);const aLmVal=agg[aLm]||0;
-
-  h+=`<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap"><span style="font-size:18px;font-weight:900">${sel.name}</span><span class="mono" style="color:var(--t4);font-size:12px">${isReg?"지역":"국가"} ${sel.code}</span><span class="mono" style="font-size:12px">최신 ${fy(aLm)} 수출 ${fn(aLmVal)} ${ch(mom(agg,aLm),"MoM ")} ${ch(yoy(agg,aLm),"YoY ")}</span><span class="mono" style="font-size:12px;color:var(--t4)">품목 ${sel.items.length}개</span></div>`;
-  h+='<div class="cg"><div class="cb w"><h4>월별 수출액 합계 (USD) + YoY (%)</h4><canvas id="bl_chart"></canvas></div></div>';
-
+  h+=`<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap"><span style="font-size:18px;font-weight:900">${sel.name}</span><span class="mono" style="color:var(--t4);font-size:12px">${labelKind} ${sel.code}</span><span class="mono" style="font-size:12px">최신 ${fy(aLm)} 수출 ${fn(aLmVal)} ${ch(mom(agg,aLm),"MoM ")} ${ch(yoy(agg,aLm),"YoY ")}</span><span class="mono" style="font-size:12px;color:var(--t4)">품목 ${sel.items.length}개</span></div>`;
+  h+=`<div class="cg"><div class="cb w"><h4>월별 수출액 합계 (USD) + YoY (%)</h4><canvas id="${prefix}_chart"></canvas></div></div>`;
   const ranked=sel.items.map(it=>({hs:it.hs,name:it.name,exp:it.exp,lv:it.exp[aLm]||0,mom:mom(it.exp,aLm),yoy:yoy(it.exp,aLm)})).filter(r=>r.lv>0).sort((a,b)=>b.lv-a.lv);
   const top10=ranked.slice(0,10);
-  if(top10.length){h+='<div class="cg"><div class="cb w"><h4>상위 10개 품목 추이</h4><canvas id="bl_top"></canvas></div></div>';}
-
+  if(top10.length)h+=`<div class="cg"><div class="cb w"><h4>상위 10개 품목 추이</h4><canvas id="${prefix}_top"></canvas></div></div>`;
   const TOP=50;const top=ranked.slice(0,TOP);
   h+=`<div class="st"><span class="d" style="background:var(--am)"></span>주요 수출 품목 TOP ${Math.min(TOP,ranked.length)} (총 ${ranked.length}개) — 행 클릭하여 상세 보기</div>`;
   h+='<div class="ts"><table class="dt"><thead><tr><th>#</th><th style="text-align:left">HS</th><th style="text-align:left">품목</th><th>최신 수출액</th><th>MoM</th><th>YoY</th><th style="min-width:75px">비중</th></tr></thead><tbody>';
   const maxLv=top[0]?.lv||1;
   top.forEach((r,i)=>{const share=(r.lv/(aLmVal||1)*100).toFixed(1);const barW=Math.max(2,r.lv/maxLv*100);h+=`<tr class="ck" onclick="searchGo('${r.hs}')"><td>${i+1}</td><td class="mono" style="text-align:left;color:var(--t3)">${r.hs}</td><td style="text-align:left;font-family:Noto Sans KR">${(r.name||"").replace(/</g,"&lt;")}</td><td style="color:var(--t1)">${fn(r.lv)}</td><td>${chB(r.mom)}</td><td>${chB(r.yoy)}</td><td class="bar-c"><div class="bar-b" style="width:${barW}%;background:var(--am)"></div>${share}%</td></tr>`});
   h+='</tbody></table></div>';
-
-  el.innerHTML=h;
-
-  const ctx=document.getElementById("bl_chart");
+  return {html:h,agg,top10};
+}
+function _byLocCharts(agg,top10,prefix){
+  const ctx=document.getElementById(prefix+"_chart");
   if(ctx){
     const aMonths=ks(agg);const rm=aMonths.slice(-14);
     const yoyArr=rm.map(m=>yoy(agg,m));
@@ -484,11 +500,289 @@ function rByLoc(el){
       {type:"line",label:"YoY (%)",data:yoyArr,borderColor:"#fbbf24",backgroundColor:"rgba(251,191,36,.1)",borderWidth:2,tension:.3,pointRadius:2.5,yAxisID:"y1",spanGaps:true}
     ]},options:{responsive:true,interaction:{mode:"index",intersect:false},plugins:{legend:{labels:{boxWidth:10,color:"#c8d4e6",font:{size:10}}},tooltip:{mode:"index",intersect:false,callbacks:{label:c=>c.dataset.yAxisID==="y1"?(c.parsed.y!=null?"YoY: "+c.parsed.y.toFixed(1)+"%":""):c.dataset.label+": "+fn(c.parsed.y)}}},scales:{y:{position:"left",ticks:{callback:v=>fn(v),color:"#a4b2c8"},grid:{color:"rgba(255,255,255,.04)"}},y1:{position:"right",grid:{display:false},ticks:{callback:v=>v.toFixed(0)+"%",color:"#a4b2c8"}},x:{grid:{display:false},ticks:{color:"#8898b0"}}}}}));
   }
-  const tctx=document.getElementById("bl_top");
+  const tctx=document.getElementById(prefix+"_top");
   if(tctx&&top10.length){
     const aMonths=ks(agg);const rm=aMonths.slice(-12);
     charts.push(new Chart(tctx,{type:"line",data:{labels:rm.map(fy),datasets:top10.map((r,i)=>({label:`${r.name}(${r.hs})`,data:rm.map(m=>(r.exp[m]||0)),borderColor:CL[i%CL.length],borderWidth:1.5,tension:.3,pointRadius:1.5}))},options:{responsive:true,interaction:{mode:"index",intersect:false},plugins:{legend:{labels:{boxWidth:8,font:{size:9},color:"#c8d4e6"}}},scales:{y:{ticks:{callback:v=>fn(v),color:"#a4b2c8"},grid:{color:"rgba(255,255,255,.04)"}},x:{ticks:{color:"#8898b0"},grid:{display:false}}}}}));
   }
+}
+
+// 특정 HS6 한정 국가 인덱스 (cFocusHs 모드용)
+function buildCountryIndexForHs(hs){
+  const out={};
+  const d=(D.ranking_6d||{})[hs];
+  if(!d)return out;
+  const cs=d.countries||{};
+  for(const[ck,cv]of Object.entries(cs)){
+    out[ck]={code:ck,name:cv.name||ck,items:[{hs,name:d.name||hs,exp:cv.exp||{}}]};
+  }
+  return out;
+}
+// 국가별 탭 전용 검색: 탭 전환 없이 cFocusHs만 갱신
+function cFocusGo(hs){
+  hs=(hs||"").toString().trim();
+  if(!hs)return;
+  if(!(D.ranking_6d||{})[hs]){
+    const inp=document.getElementById("cSrchInput");if(inp){inp.classList.add("err");setTimeout(()=>inp.classList.remove("err"),600);}
+    return;
+  }
+  cFocusHs=hs;cSel=null;
+  const drop=document.getElementById("cSrchDrop");if(drop){drop.classList.remove("show");drop.innerHTML="";}
+  rMain();
+}
+function cFocusClear(){cFocusHs=null;cSel=null;rMain();}
+// 국가 검색 (alpha-2 / 한국어명 CNAMES / 영문명 MAP_META)
+function searchCountries(q){
+  q=(q||"").trim();if(!q)return [];
+  const ql=q.toLowerCase();
+  const idx=buildCountryIndex();
+  const out=[];
+  for(const ck of Object.keys(idx)){
+    const v=idx[ck];
+    const koNm=CNAMES[ck]||v.name||"";
+    const enNm=(MAP_META&&MAP_META[ck]&&MAP_META[ck].name)||"";
+    if(ck.toLowerCase().includes(ql)||koNm.includes(q)||enNm.toLowerCase().includes(ql)){
+      out.push({ck,name:koNm||enNm||ck});
+    }
+  }
+  // 정확 매칭(코드/이름 시작)을 위로
+  out.sort((a,b)=>{
+    const aExact=(a.ck.toLowerCase()===ql||a.name===q)?0:1;
+    const bExact=(b.ck.toLowerCase()===ql||b.name===q)?0:1;
+    return aExact-bExact;
+  });
+  return out.slice(0,10);
+}
+function cGoCountry(ck){
+  if(!ck)return;
+  const idx=buildCountryIndex();
+  if(!idx[ck]){
+    const inp=document.getElementById("cSrchInput");if(inp){inp.classList.add("err");setTimeout(()=>inp.classList.remove("err"),600);}
+    return;
+  }
+  cSel=ck;
+  const drop=document.getElementById("cSrchDrop");if(drop){drop.classList.remove("show");drop.innerHTML="";}
+  const inp=document.getElementById("cSrchInput");if(inp)inp.value="";
+  rMain();
+}
+function cFocusSubmit(){
+  const inp=document.getElementById("cSrchInput");if(!inp)return;
+  const q=(inp.value||"").trim();if(!q)return;
+  if(/^\d{2,10}$/.test(q)){cFocusGo(q);return;}
+  // 국가 먼저 시도
+  const cRes=searchCountries(q);
+  if(cRes.length){cGoCountry(cRes[0].ck);return;}
+  const r=searchHS(q).filter(x=>(D.ranking_6d||{})[x.hs]);
+  if(r.length)cFocusGo(r[0].hs);
+}
+function _cDispatchItem(el){
+  if(!el)return;
+  if(el.dataset.type==="country")cGoCountry(el.dataset.ck);
+  else cFocusGo(el.dataset.hs);
+}
+function cSetupSearch(){
+  const inp=document.getElementById("cSrchInput");const drop=document.getElementById("cSrchDrop");
+  if(!inp||!drop)return;
+  let hi=-1;
+  function render(){
+    const q=inp.value;
+    const cRes=searchCountries(q).slice(0,8);
+    const hsRes=searchHS(q).filter(x=>(D.ranking_6d||{})[x.hs]).slice(0,12);
+    const total=cRes.length+hsRes.length;
+    hi=total?0:-1;
+    if(!total){drop.classList.remove("show");drop.innerHTML="";return;}
+    const cHtml=cRes.map((c,i)=>`<div class="srch-item ${i===hi?"hi":""}" data-type="country" data-ck="${c.ck}"><span class="si-hs">${c.ck}</span><span class="si-name">${(c.name||"").replace(/</g,"&lt;")}</span><span class="si-tag t-country">국가</span></div>`).join("");
+    const off=cRes.length;
+    const hHtml=hsRes.map((r,i)=>{const j=off+i;return `<div class="srch-item ${j===hi?"hi":""}" data-type="hs" data-hs="${r.hs}"><span class="si-hs">${r.hs}</span><span class="si-name">${(r.name||"").replace(/</g,"&lt;")||"(이름 없음)"}</span><span class="si-tag t-${r.type}">HS6</span></div>`}).join("");
+    drop.innerHTML=cHtml+hHtml;
+    drop.classList.add("show");
+    drop.querySelectorAll(".srch-item").forEach(el=>{el.onmousedown=e=>{e.preventDefault();_cDispatchItem(el);}});
+  }
+  inp.addEventListener("input",render);
+  inp.addEventListener("focus",render);
+  inp.addEventListener("blur",()=>setTimeout(()=>drop.classList.remove("show"),120));
+  inp.addEventListener("keydown",e=>{
+    const items=drop.querySelectorAll(".srch-item");
+    if(e.key==="Enter"){e.preventDefault();if(hi>=0&&items[hi])_cDispatchItem(items[hi]);else cFocusSubmit();}
+    else if(e.key==="ArrowDown"){e.preventDefault();if(items.length){if(hi>=0)items[hi].classList.remove("hi");hi=Math.min(hi+1,items.length-1);items[hi].classList.add("hi");}}
+    else if(e.key==="ArrowUp"){e.preventDefault();if(items.length){if(hi>=0)items[hi].classList.remove("hi");hi=Math.max(hi-1,0);items[hi].classList.add("hi");}}
+    else if(e.key==="Escape"){drop.classList.remove("show");inp.blur();}
+  });
+}
+
+// ===== Choropleth 세계지도 (국가별 탭 헤더, 태평양 중심) =====
+const MAP_W=1200,MAP_H=480;
+const MAP_LAT_TOP=85,MAP_LAT_BOT=-58; // 표시 위도 범위 (남극은 잘라내고 그린란드/북극 끝까지 포함)
+const MAP_CENTER_LNG=150; // 태평양 중심 (한국 ~127°E 약간 우측)
+const MAP_SX=MAP_W/360;
+const MAP_SY=MAP_H/(MAP_LAT_TOP-MAP_LAT_BOT);
+function shiftLng(lng){return ((lng-MAP_CENTER_LNG+540)%360)-180}
+function ll2screen(lng,lat){return [(shiftLng(lng)+180)*MAP_SX,(MAP_LAT_TOP-lat)*MAP_SY]}
+// 폴리곤 ring을 lng wrap 발생 지점에서 분할
+function splitWrap(ring){
+  const segs=[[]];let prev=null;
+  for(const p of ring){
+    const sl=shiftLng(p[0]);
+    if(prev!==null&&Math.abs(sl-prev)>180){segs.push([])}
+    segs[segs.length-1].push([sl,p[1]]);
+    prev=sl;
+  }
+  return segs.filter(s=>s.length>=3);
+}
+async function loadMapAssets(){
+  if(MAP_LOAD)return MAP_LOAD;
+  MAP_LOAD=Promise.all([
+    fetch("/static/world.geo.json").then(r=>r.json()),
+    fetch("/static/country_meta.json").then(r=>r.json())
+  ]).then(([geo,meta])=>{
+    MAP_GEO=geo;MAP_META=meta;
+    // alpha-3 → alpha-2 역매핑 (feature.id가 alpha-3)
+    const a3to2={};
+    for(const[a2,v] of Object.entries(meta))if(v&&v.a3)a3to2[v.a3]=a2;
+    MAP_GEO._a3to2=a3to2;
+    return [geo,meta];
+  });
+  return MAP_LOAD;
+}
+function buildMapTotals(idx){
+  const out={};
+  for(const[ck,v] of Object.entries(idx||{})){
+    let s=0;for(const it of v.items||[])for(const x of Object.values(it.exp||{}))s+=(x||0);
+    if(s>0)out[ck]={name:v.name,total:s};
+  }
+  return out;
+}
+function rMap3D(wrap,idx,subLabel){
+  wrap.innerHTML='<div class="map3d-status">지도 로딩…</div>';
+  loadMapAssets().then(([geo,meta])=>{
+    const totals=buildMapTotals(idx);
+    const ckArr=Object.keys(totals).filter(ck=>meta[ck]);
+    const vals=ckArr.map(ck=>totals[ck].total);
+    const hasData=vals.length>0;
+    const maxV=hasData?Math.max(...vals):0;
+    const minV=hasData?Math.min(...vals):0;
+    const sumV=vals.reduce((a,b)=>a+b,0);
+    const lgMax=Math.log10(maxV+1),lgMin=Math.log10(Math.max(minV,1));
+    const span=lgMax-lgMin||1;
+    function tNorm(v){return Math.min(1,Math.max(0,(Math.log10(Math.max(v,1))-lgMin)/span))}
+    // 색: 데이터 없는 국가는 어두운 회색, 있으면 cyan log scale
+    function landFill(v){
+      if(!v||v<=0)return null; // null = no-data class 처리
+      const t=tNorm(v);
+      // Emerald: dark forest → emerald → mint
+      const L=8+t*72;  // 8~80%
+      const S=58+t*30; // 58~88%
+      const H=145+t*18; // 145(forest) → 163(mint)
+      return `hsl(${H},${S}%,${L}%)`;
+    }
+    const a3to2=geo._a3to2||{};
+    // alpha-2 → polygon points 배열들 묶기
+    const byCk={}; // {ck: [pointsStr, ...]}
+    for(const feat of (geo.features||[])){
+      const a3=feat.id;const a2=a3to2[a3];
+      const g=feat.geometry;if(!g)continue;
+      const polys=g.type==="Polygon"?[g.coordinates]:(g.type==="MultiPolygon"?g.coordinates:null);
+      if(!polys)continue;
+      const key=a2||("_"+(a3||"x"));
+      if(!byCk[key])byCk[key]=[];
+      for(const poly of polys){
+        const ring=poly[0];if(!ring||ring.length<3)continue;
+        for(const seg of splitWrap(ring)){
+          // seg: [[shiftedLng,lat],...] — 이미 shift 적용됨, 화면 좌표 직접 계산
+          const pts=seg.map(p=>{const x=(p[0]+180)*MAP_SX;const y=(MAP_LAT_TOP-p[1])*MAP_SY;return x.toFixed(1)+","+y.toFixed(1)});
+          byCk[key].push(pts.join(" "));
+        }
+      }
+    }
+    const parts=[`<svg class="map3d-svg" viewBox="0 0 ${MAP_W} ${MAP_H}" preserveAspectRatio="xMidYMid meet">`];
+    parts.push('<g class="map3d-land">');
+    // 데이터 없는 국가 먼저 (밑에 깔리도록)
+    const ordered=Object.entries(byCk).sort((a,b)=>{
+      const va=(totals[a[0]]?.total)||0,vb=(totals[b[0]]?.total)||0;
+      return va-vb; // 작은 값 먼저 (위에 큰 값이 그려져도 영역이 안 겹치지만 hover stack 자연스럽게)
+    });
+    for(const[ck,polyList] of ordered){
+      const t=totals[ck];const v=t?t.total:0;
+      const fill=landFill(v);
+      const cls=fill?"map3d-c":"map3d-c no-data";
+      const fillAttr=fill?` fill="${fill}"`:"";
+      const sh=(hasData&&v>0)?(v/sumV*100).toFixed(2):"0";
+      const nmKo=t?(CNAMES[ck]||t.name):(meta[ck]?(CNAMES[ck]||meta[ck].name):ck);
+      const nmEsc=(nmKo||"").replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;");
+      parts.push(`<g class="${cls}" data-ck="${ck}" data-name="${nmEsc}" data-val="${v}" data-share="${sh}">`);
+      for(const pts of polyList)parts.push(`<polygon points="${pts}"${fillAttr}/>`);
+      parts.push('</g>');
+    }
+    parts.push('</g>');
+    parts.push('</svg>');
+    const subEsc=(subLabel||"전체 합산").replace(/&/g,"&amp;").replace(/</g,"&lt;");
+    parts.push(`<div class="map3d-cap">세계 수출 분포 · <b>${subEsc}</b> · ${ckArr.length}개국 · 합계 ${fn(sumV)}</div>`);
+    if(hasData)parts.push(`<div class="map3d-leg">log scale<span class="lg-bar"></span>${fn(minV)} → ${fn(maxV)}</div>`);
+    parts.push('<div class="map3d-tt" id="map3dTT"></div>');
+    wrap.innerHTML=parts.join("");
+    // 인터랙션
+    const tt=wrap.querySelector("#map3dTT");
+    wrap.querySelectorAll(".map3d-c:not(.no-data)").forEach(g=>{
+      g.addEventListener("mousemove",ev=>{
+        const r=wrap.getBoundingClientRect();
+        const x=ev.clientX-r.left,y=ev.clientY-r.top;
+        const ck=g.getAttribute("data-ck"),nm=g.getAttribute("data-name");
+        const val=parseFloat(g.getAttribute("data-val")),sh=g.getAttribute("data-share");
+        tt.innerHTML=`<div class="tt-n">${nm} <span style="color:var(--t4);font-weight:400">${ck}</span></div><div class="tt-v">수출 ${fn(val)}</div><div class="tt-h">전체 비중 ${sh}% · 클릭하여 선택</div>`;
+        tt.classList.add("show");
+        const tw=tt.offsetWidth,th=tt.offsetHeight;
+        let lx=x+14,ly=y+14;
+        if(lx+tw>r.width)lx=x-tw-14;
+        if(ly+th>r.height)ly=y-th-14;
+        tt.style.left=lx+"px";tt.style.top=ly+"px";
+      });
+      g.addEventListener("mouseleave",()=>tt.classList.remove("show"));
+      g.addEventListener("click",()=>{cSel=g.getAttribute("data-ck");rMain()});
+    });
+  }).catch(err=>{
+    wrap.innerHTML=`<div class="map3d-status">지도 로드 실패: ${(err&&err.message)||err}</div>`;
+  });
+}
+
+// ===== 국가별 =====
+function rByCountry(el){
+  const focusItem=cFocusHs?(D.ranking_6d||{})[cFocusHs]:null;
+  if(cFocusHs&&!focusItem)cFocusHs=null; // 잘못된 hs 자동 해제
+  const idx=cFocusHs?buildCountryIndexForHs(cFocusHs):buildCountryIndex();
+  const {arr,sel,curSel}=_byLocPrep(idx,cSel);cSel=curSel;
+  // 헤더 + 검색
+  const totalHsCnt=Object.keys(D.ranking_6d||{}).length;
+  const subLbl=cFocusHs?`HS6 ${cFocusHs}${focusItem?.name?` · ${focusItem.name}`:""} 한정`:`HS6 ${totalHsCnt}개 합산`;
+  let h=`<div class="st"><span class="d" style="background:var(--cy)"></span>국가별 수출 품목 보기 <span style="color:var(--t4);font-weight:400;font-size:11px">(${subLbl})</span></div>`;
+  h+=`<div class="map3d" id="map3dWrap"></div>`;
+  h+=`<div class="cs-hd"><div class="cs-sw"><input id="cSrchInput" class="cs-in" placeholder="🔍 HS 코드·품목명·국가 검색 (예: 330499 / 광전지 / 미국)" autocomplete="off"/><div id="cSrchDrop" class="srch-drop"></div></div>`;
+  if(cFocusHs){h+=`<button class="cs-clr" onclick="cFocusClear()">전체 합산으로 ✕</button>`}
+  h+=`</div>`;
+  function _cFinalize(){setTimeout(()=>{cSetupSearch();const w=document.getElementById("map3dWrap");if(w)rMap3D(w,idx,subLbl)},0)}
+  if(!arr.length){el.innerHTML=h+`<div style="text-align:center;padding:50px;color:var(--t4)">국가 데이터 없음</div>`;_cFinalize();return;}
+  h+=`<div class="pills" style="margin-bottom:18px;justify-content:flex-start">`;
+  arr.forEach(l=>{h+=`<button class="pill ${l.code===cSel?"on":""}" onclick="cSel='${l.code}';rMain()">${l.name} <span style="opacity:.5;font-weight:400;font-size:10px">${fn(l.tot)}</span></button>`});
+  h+=`</div>`;
+  if(!sel){el.innerHTML=h;_cFinalize();return;}
+  const r=_byLocBody(h,sel,"국가","cl");
+  el.innerHTML=r.html;
+  _byLocCharts(r.agg,r.top10,"cl");
+  _cFinalize();
+}
+
+// ===== 국내 지역별 =====
+function rByRegion(el){
+  const idx=buildRegionIndex();
+  const {arr,sel,curSel}=_byLocPrep(idx,rSel);rSel=curSel;
+  let h=`<div class="st"><span class="d" style="background:var(--cy)"></span>국내 지역별 수출 품목 보기 <span style="color:var(--t4);font-weight:400;font-size:11px">(메인 품목 한정)</span></div>`;
+  if(!arr.length){el.innerHTML=h+`<div style="text-align:center;padding:50px;color:var(--t4)">지역 데이터 없음</div>`;return;}
+  h+=`<div class="pills" style="margin-bottom:18px;justify-content:flex-start">`;
+  arr.forEach(l=>{h+=`<button class="pill ${l.code===rSel?"on":""}" onclick="rSel='${l.code}';rMain()">${l.name} <span style="opacity:.5;font-weight:400;font-size:10px">${fn(l.tot)}</span></button>`});
+  h+=`</div>`;
+  if(!sel){el.innerHTML=h;return;}
+  const r=_byLocBody(h,sel,"지역","rl");
+  el.innerHTML=r.html;
+  _byLocCharts(r.agg,r.top10,"rl");
 }
 
 function rItem(el,hs){
