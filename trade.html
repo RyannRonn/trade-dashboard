@@ -106,18 +106,22 @@ table.dt tr.ck{cursor:pointer}table.dt tr.ck:hover{background:rgba(77,159,255,.0
 .cs-sw .srch-drop{position:absolute;top:38px;left:0;width:100%;max-width:100%}
 .cs-clr{padding:7px 12px;border:1px solid rgba(232,168,48,.4);background:rgba(232,168,48,.08);color:#e8a830;border-radius:6px;font-size:11px;font-family:"Fira Code";cursor:pointer}
 .cs-clr:hover{background:rgba(232,168,48,.16)}
-.map3d{position:relative;background:radial-gradient(ellipse at 50% 40%,#0c1626 0%,#060a11 85%);border:1px solid var(--bd);border-radius:8px;margin-bottom:16px;overflow:hidden}
+.map3d{position:relative;background:radial-gradient(ellipse at 50% 40%,#2e3b54 0%,#1d2840 90%);border:1px solid var(--bd);border-radius:8px;margin-bottom:16px;overflow:hidden}
 .map3d-svg{width:100%;height:auto;display:block}
 .map3d-cap{position:absolute;top:8px;left:12px;font-size:10.5px;color:var(--t3);font-family:"Fira Code",monospace;pointer-events:none;letter-spacing:.2px}
 .map3d-cap b{color:var(--cy);font-weight:600}
-.map3d-leg{position:absolute;bottom:8px;right:12px;font-size:9.5px;color:var(--t4);font-family:"Fira Code",monospace;pointer-events:none}
-.map3d-leg .lg-bar{display:inline-block;width:64px;height:5px;background:linear-gradient(90deg,hsl(145,58%,8%),hsl(154,73%,44%),hsl(163,88%,80%));border-radius:2px;vertical-align:middle;margin:0 5px}
+.map3d-leg{position:absolute;bottom:10px;right:12px;display:flex;align-items:center;gap:9px;background:rgba(8,12,20,.88);padding:7px 11px;border-radius:6px;border:1px solid var(--bd);font-family:"Fira Code",monospace;pointer-events:none;font-size:9.5px;color:var(--t3)}
+.map3d-leg .lg-end{line-height:1.25;text-align:center;white-space:nowrap}
+.map3d-leg .lg-end .lg-tag{display:block;color:var(--t4);font-size:9px;letter-spacing:.4px;margin-bottom:1px}
+.map3d-leg .lg-end.hi{color:var(--gn)}
+.map3d-leg .lg-end.hi .lg-tag{color:var(--gn)}
+.map3d-leg .lg-bar{display:inline-block;width:130px;height:10px;background:linear-gradient(90deg,hsl(150,12%,86%),hsl(154,56%,70%),hsl(158,100%,54%));border-radius:3px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.15),0 0 6px hsla(158,100%,55%,.3)}
 .map3d-status{padding:60px 20px;text-align:center;color:var(--t4);font-size:12px}
-.map3d-land{stroke:#2a3a55;stroke-width:.4;stroke-linejoin:round}
+.map3d-land{stroke:#1a2440;stroke-width:.4;stroke-linejoin:round}
 .map3d-c{cursor:pointer;transition:filter .12s,stroke .12s}
-.map3d-c:hover{filter:brightness(1.45);stroke:var(--cy);stroke-width:.8}
-.map3d-c.no-data{cursor:default;fill:#101828}
-.map3d-c.no-data:hover{filter:none;stroke:#2a3a55;stroke-width:.4}
+.map3d-c:hover{filter:saturate(1.3) brightness(1.18) drop-shadow(0 0 4px hsla(158,100%,60%,.7));stroke:#5fffae;stroke-width:1.2}
+.map3d-c.no-data{cursor:default;fill:#3d4a64}
+.map3d-c.no-data:hover{filter:none;stroke:#1a2440;stroke-width:.4}
 .map3d-tt{position:absolute;pointer-events:none;background:rgba(8,12,20,.96);border:1px solid var(--bd);border-radius:6px;padding:7px 11px;font-family:"Fira Code",monospace;color:var(--t1);z-index:10;display:none;white-space:nowrap;box-shadow:0 4px 18px rgba(0,0,0,.55);font-size:11px}
 .map3d-tt.show{display:block}
 .map3d-tt .tt-n{color:var(--cy);font-weight:700;margin-bottom:3px;font-size:12px}
@@ -663,16 +667,23 @@ function rMap3D(wrap,idx,subLabel){
     const minV=hasData?Math.min(...vals):0;
     const sumV=vals.reduce((a,b)=>a+b,0);
     const lgMax=Math.log10(maxV+1),lgMin=Math.log10(Math.max(minV,1));
-    const span=lgMax-lgMin||1;
-    function tNorm(v){return Math.min(1,Math.max(0,(Math.log10(Math.max(v,1))-lgMin)/span))}
+    const lgSpan=lgMax-lgMin||1;
+    const linDen=maxV||1;
+    // 40% log + 60% linear 혼합 — 상위 국가 도드라지면서 하위도 살아있음
+    const MIX=0.4;
+    function tNorm(v){
+      const tLog=Math.min(1,Math.max(0,(Math.log10(Math.max(v,1))-lgMin)/lgSpan));
+      const tLin=Math.min(1,Math.max(0,v/linDen));
+      return MIX*tLog+(1-MIX)*tLin;
+    }
     // 색: 데이터 없는 국가는 어두운 회색, 있으면 cyan log scale
     function landFill(v){
       if(!v||v<=0)return null; // null = no-data class 처리
       const t=tNorm(v);
-      // Emerald: dark forest → emerald → mint
-      const L=8+t*72;  // 8~80%
-      const S=58+t*30; // 58~88%
-      const H=145+t*18; // 145(forest) → 163(mint)
+      // 옅은 민트 → 네온 spring-green (다크 테마 형광빛)
+      const L=86-t*32; // 86~54% (top을 살짝 더 밝게 = neon 발광감)
+      const S=12+t*88; // 12~100% (작음=거의 무채 → 큼=풀채도)
+      const H=150+t*8; // 150→158
       return `hsl(${H},${S}%,${L}%)`;
     }
     const a3to2=geo._a3to2||{};
@@ -717,7 +728,7 @@ function rMap3D(wrap,idx,subLabel){
     parts.push('</svg>');
     const subEsc=(subLabel||"전체 합산").replace(/&/g,"&amp;").replace(/</g,"&lt;");
     parts.push(`<div class="map3d-cap">세계 수출 분포 · <b>${subEsc}</b> · ${ckArr.length}개국 · 합계 ${fn(sumV)}</div>`);
-    if(hasData)parts.push(`<div class="map3d-leg">log scale<span class="lg-bar"></span>${fn(minV)} → ${fn(maxV)}</div>`);
+    if(hasData)parts.push(`<div class="map3d-leg"><span class="lg-end"><span class="lg-tag">적음</span>${fn(minV)}</span><span class="lg-bar"></span><span class="lg-end hi"><span class="lg-tag">많음</span>${fn(maxV)}</span></div>`);
     parts.push('<div class="map3d-tt" id="map3dTT"></div>');
     wrap.innerHTML=parts.join("");
     // 인터랙션
@@ -749,20 +760,72 @@ function rByCountry(el){
   const focusItem=cFocusHs?(D.ranking_6d||{})[cFocusHs]:null;
   if(cFocusHs&&!focusItem)cFocusHs=null; // 잘못된 hs 자동 해제
   const idx=cFocusHs?buildCountryIndexForHs(cFocusHs):buildCountryIndex();
-  const {arr,sel,curSel}=_byLocPrep(idx,cSel);cSel=curSel;
-  // 헤더 + 검색
+  // 헤더 + 지도 + 검색
   const totalHsCnt=Object.keys(D.ranking_6d||{}).length;
   const subLbl=cFocusHs?`HS6 ${cFocusHs}${focusItem?.name?` · ${focusItem.name}`:""} 한정`:`HS6 ${totalHsCnt}개 합산`;
   let h=`<div class="st"><span class="d" style="background:var(--cy)"></span>국가별 수출 품목 보기 <span style="color:var(--t4);font-weight:400;font-size:11px">(${subLbl})</span></div>`;
   h+=`<div class="map3d" id="map3dWrap"></div>`;
   h+=`<div class="cs-hd"><div class="cs-sw"><input id="cSrchInput" class="cs-in" placeholder="🔍 HS 코드·품목명·국가 검색 (예: 330499 / 광전지 / 미국)" autocomplete="off"/><div id="cSrchDrop" class="srch-drop"></div></div>`;
   if(cFocusHs){h+=`<button class="cs-clr" onclick="cFocusClear()">전체 합산으로 ✕</button>`}
+  if(cFocusHs&&cSel){h+=`<button class="cs-clr" onclick="cSel=null;rMain()">국가 해제 ✕</button>`}
   h+=`</div>`;
   function _cFinalize(){setTimeout(()=>{cSetupSearch();const w=document.getElementById("map3dWrap");if(w)rMap3D(w,idx,subLbl)},0)}
+
+  // HS 검색 직후(국가 미선택)는 품목 상세를 그대로 보여줌. 지도에서 국가 클릭 시 국가별 상세로 전환.
+  if(cFocusHs&&!cSel){
+    h+=`<div style="margin-bottom:10px;color:var(--t4);font-size:11px;text-align:center">지도에서 국가를 클릭하면 해당 국가 한정 상세로 전환됩니다.</div>`;
+    h+=`<div id="cBodyHost"></div>`;
+    el.innerHTML=h;
+    rSearchHS6(document.getElementById("cBodyHost"),cFocusHs,focusItem);
+    _cFinalize();
+    return;
+  }
+
+  // HS 한정 + 국가 선택 → 그 국가의 그 품목 상세 (수출액·중량·단가)
+  if(cFocusHs&&cSel){
+    const ce=(focusItem.countries||{})[cSel];
+    if(!ce){cSel=null;return rByCountry(el);}
+    const cName=ce.name||cSel;
+    const exp=ce.exp||{};const wgt=ce.wgt||{};
+    const hasWgt=Object.values(wgt).some(v=>v>0);
+    const ppk=m=>{const w=wgt[m]||0;const e=exp[m]||0;return w>0?e/w:null};
+    const months=ks(exp);const lm=lt(exp);const lmVal=exp[lm]||0;const ppkLm=ppk(lm);
+    h+=`<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap"><span style="font-size:18px;font-weight:900">${cName}</span><span class="mono" style="color:var(--t4);font-size:12px">국가 ${cSel}</span><span class="mono" style="font-size:12px">최신 ${fy(lm)} 수출 ${fn(lmVal)} ${ch(mom(exp,lm),"MoM ")} ${ch(yoy(exp,lm),"YoY ")}${ppkLm!=null?` · 단가 <strong style="color:var(--t1)">${ppkLm.toFixed(2)}</strong> USD/kg`:""}</span><span class="mono" style="font-size:12px;color:var(--t4)">HS ${cFocusHs}${focusItem.name?` · ${focusItem.name}`:""}</span></div>`;
+    if(!lm){el.innerHTML=h+'<div style="text-align:center;padding:30px;color:var(--t4)">데이터 없음</div>';_cFinalize();return;}
+    h+='<div class="cg"><div class="cb w"><h4>월별 수출액 (USD) + YoY (%)</h4><canvas id="cl_chart"></canvas></div></div>';
+    if(hasWgt){h+='<div class="cg"><div class="cb w"><h4>월별 단가 (USD/kg) + 중량 (kg)</h4><canvas id="cl_chart_pp"></canvas></div></div>';}
+    else{h+='<div style="text-align:center;padding:14px;color:var(--t4);font-size:11px;margin-bottom:10px">이 국가의 중량 데이터 없음 — 단가 계산 불가</div>';}
+    const rm=months.slice(-14);const rr=[...rm].reverse();
+    h+=`<div class="st"><span class="d" style="background:var(--am)"></span>월별 상세</div>`;
+    h+='<div class="ts"><table class="dt"><thead><tr><th>#</th><th>연월</th><th>수출액 (USD)</th>'+(hasWgt?'<th>중량 (kg)</th><th>단가 (USD/kg)</th>':'')+'<th>MoM</th><th>YoY</th></tr></thead><tbody>';
+    rr.forEach((m,i)=>{const pp=ppk(m);h+=`<tr><td>${i+1}</td><td>${fy(m)}</td><td style="color:var(--t1)">${fn(exp[m]||0)}</td>${hasWgt?`<td>${fn(wgt[m]||0)}</td><td>${pp!=null?pp.toFixed(2):"-"}</td>`:""}<td>${chB(mom(exp,m))}</td><td>${chB(yoy(exp,m))}</td></tr>`});
+    h+='</tbody></table></div>';
+    el.innerHTML=h;
+    // 차트
+    const ctx=document.getElementById("cl_chart");
+    if(ctx){
+      const yoyArr=rm.map(m=>yoy(exp,m));
+      charts.push(new Chart(ctx,{type:"bar",data:{labels:rm.map(fy),datasets:[
+        {type:"bar",label:"수출(USD)",data:rm.map(m=>exp[m]||0),backgroundColor:"rgba(77,159,255,.35)",borderColor:"#4d9fff",borderWidth:1,borderRadius:3,yAxisID:"y"},
+        {type:"line",label:"YoY (%)",data:yoyArr,borderColor:"#22d3ee",backgroundColor:"rgba(34,211,238,.1)",borderWidth:2,tension:.3,pointRadius:2.5,yAxisID:"y1",spanGaps:true}
+      ]},options:{responsive:true,interaction:{mode:"index",intersect:false},plugins:{legend:{labels:{boxWidth:10,color:"#c8d4e6",font:{size:10}}},tooltip:{mode:"index",intersect:false,callbacks:{label:c=>c.dataset.yAxisID==="y1"?(c.parsed.y!=null?"YoY: "+c.parsed.y.toFixed(1)+"%":""):c.dataset.label+": "+fn(c.parsed.y)}}},scales:{y:{position:"left",ticks:{callback:v=>fn(v),color:"#a4b2c8"},grid:{color:"rgba(255,255,255,.04)"}},y1:{position:"right",grid:{display:false},ticks:{callback:v=>v.toFixed(0)+"%",color:"#a4b2c8"}},x:{grid:{display:false},ticks:{color:"#8898b0"}}}}}));
+    }
+    if(hasWgt){
+      const ppctx=document.getElementById("cl_chart_pp");
+      if(ppctx){
+        charts.push(new Chart(ppctx,{type:"bar",data:{labels:rm.map(fy),datasets:[
+          {type:"bar",label:"중량(kg)",data:rm.map(m=>wgt[m]||0),backgroundColor:"rgba(168,85,247,.3)",borderColor:"#a855f7",borderWidth:1,borderRadius:3,yAxisID:"y"},
+          {type:"line",label:"단가(USD/kg)",data:rm.map(m=>ppk(m)),borderColor:"#fbbf24",backgroundColor:"rgba(251,191,36,.1)",borderWidth:2,tension:.3,pointRadius:2.5,yAxisID:"y1",spanGaps:true}
+        ]},options:{responsive:true,interaction:{mode:"index",intersect:false},plugins:{legend:{labels:{boxWidth:10,color:"#c8d4e6",font:{size:10}}},tooltip:{mode:"index",intersect:false,callbacks:{label:c=>c.dataset.yAxisID==="y1"?(c.parsed.y!=null?"단가: "+c.parsed.y.toFixed(2)+" USD/kg":""):c.dataset.label+": "+fn(c.parsed.y)}}},scales:{y:{position:"left",ticks:{callback:v=>fn(v),color:"#a4b2c8"},grid:{color:"rgba(255,255,255,.04)"}},y1:{position:"right",grid:{display:false},ticks:{callback:v=>v?.toFixed(2),color:"#a4b2c8"}},x:{grid:{display:false},ticks:{color:"#8898b0"}}}}}));
+      }
+    }
+    _cFinalize();
+    return;
+  }
+
+  const {arr,sel,curSel}=_byLocPrep(idx,cSel);cSel=curSel;
   if(!arr.length){el.innerHTML=h+`<div style="text-align:center;padding:50px;color:var(--t4)">국가 데이터 없음</div>`;_cFinalize();return;}
-  h+=`<div class="pills" style="margin-bottom:18px;justify-content:flex-start">`;
-  arr.forEach(l=>{h+=`<button class="pill ${l.code===cSel?"on":""}" onclick="cSel='${l.code}';rMain()">${l.name} <span style="opacity:.5;font-weight:400;font-size:10px">${fn(l.tot)}</span></button>`});
-  h+=`</div>`;
+  // 국가 pill 제거됨 — 선택은 지도 클릭 또는 검색바로 (선택 국가는 본문 헤더에 표시)
   if(!sel){el.innerHTML=h;_cFinalize();return;}
   const r=_byLocBody(h,sel,"국가","cl");
   el.innerHTML=r.html;
