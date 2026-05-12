@@ -113,7 +113,7 @@ def main():
     for ym in sorted(exp_total.keys()):
         print(f"  {ym}: exp={exp_total[ym]:>15,} imp={imp_total[ym]:>15,}")
 
-    # DB 갱신
+    # DB 갱신 (PK가 (data_type, ym)이라 INSERT OR REPLACE = 자연 누적)
     con = sqlite3.connect(db_path)
     rows = [("total", "", "", "", ym, exp_total[ym], imp_total[ym], 0)
             for ym in exp_total]
@@ -123,20 +123,30 @@ def main():
         "VALUES (?,?,?,?,?,?,?,?)",
         rows
     )
-    con.commit(); con.close()
-    print(f"DB trade_data 'total' {len(rows)}행 갱신")
+    con.commit()
+    print(f"DB trade_data 'total' {len(rows)}행 갱신 (이번 수집분)")
 
-    # JSON 갱신
+    # JSON 갱신: DB에 누적된 전체 월을 dump (옛 달 보존)
+    cur = con.execute(
+        "SELECT ym, exp_usd, imp_usd FROM trade_data "
+        "WHERE data_type='total' ORDER BY ym")
+    db_exp, db_imp = {}, {}
+    for ym, e, i in cur:
+        db_exp[ym] = e
+        db_imp[ym] = i
+    con.close()
+
     with open(json_path, "r", encoding="utf-8") as f:
         d = json.load(f)
     d.setdefault("total", {"exp": {}, "imp": {}})
-    d["total"]["exp"] = {ym: exp_total[ym] for ym in sorted(exp_total)}
-    d["total"]["imp"] = {ym: imp_total[ym] for ym in sorted(imp_total)}
+    d["total"]["exp"] = db_exp
+    d["total"]["imp"] = db_imp
     from datetime import datetime
     d["total_generated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(d, f, ensure_ascii=False, separators=(",", ":"))
-    print(f"trade_data_v2.json 'total' 갱신 완료 ({os.path.getsize(json_path):,} bytes)")
+    print(f"trade_data_v2.json 'total' DB 전체({len(db_exp)}개월) dump 완료 "
+          f"({os.path.getsize(json_path):,} bytes)")
     print("DONE")
 
 

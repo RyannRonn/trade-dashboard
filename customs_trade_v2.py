@@ -532,6 +532,168 @@ def get_top_hs6_codes(hs, api_key, date_ranges, top_n=3):
     return [code for code, _ in sorted_codes[:top_n]]
 
 
+def _merge_ym_dict(old, new):
+    """{ym: val} 형태 dict 머지: 새 값으로 덮고 새에 없는 옛 키는 유지."""
+    out = dict(old) if isinstance(old, dict) else {}
+    if isinstance(new, dict):
+        out.update(new)
+    return out
+
+
+def merge_with_existing(new_data, json_path):
+    """새로 수집한 데이터를 기존 trade_data_v2.json과 머지.
+    월별 시계열은 모두 누적 (같은 (HS·국가·월) 키만 새 값으로 덮음),
+    메타/사전류·name 등은 새 값 우선. ranking_6d는 기존 그대로 유지
+    (collect_ranking.py가 DB→JSON으로 재빌드)."""
+    if not os.path.exists(json_path):
+        return new_data
+    try:
+        with open(json_path, "r", encoding="utf-8") as f:
+            old = json.load(f)
+    except Exception as e:
+        print(f"[WARN] 기존 JSON 로드 실패, 덮어쓰기로 진행: {e}", file=sys.stderr)
+        return new_data
+
+    out = dict(new_data)
+
+    # total
+    et = old.get("total", {}) or {}
+    nt = new_data.get("total", {}) or {}
+    out["total"] = {
+        "exp": _merge_ym_dict(et.get("exp", {}), nt.get("exp", {})),
+        "imp": _merge_ym_dict(et.get("imp", {}), nt.get("imp", {})),
+    }
+
+    # items: hs별 머지
+    eitems = old.get("items", {}) or {}
+    nitems = new_data.get("items", {}) or {}
+    merged_items = {}
+    for hs in set(eitems) | set(nitems):
+        eo = eitems.get(hs, {}) or {}
+        ne = nitems.get(hs, {}) or {}
+        item = dict(ne) if ne else dict(eo)
+        if not item.get("name"):
+            item["name"] = eo.get("name") or ne.get("name") or hs
+        for k in ("total_exp", "total_imp", "total_wgt"):
+            merged = _merge_ym_dict(eo.get(k, {}), ne.get(k, {}))
+            if merged or k in eo or k in ne:
+                item[k] = merged
+
+        # countries
+        ec = eo.get("countries", {}) or {}
+        nc = ne.get("countries", {}) or {}
+        mc = {}
+        for cd in set(ec) | set(nc):
+            e1 = ec.get(cd, {}) or {}
+            n1 = nc.get(cd, {}) or {}
+            entry = {
+                "name": n1.get("name") or e1.get("name") or cd,
+                "exp":  _merge_ym_dict(e1.get("exp", {}), n1.get("exp", {})),
+            }
+            ew = e1.get("wgt"); nw = n1.get("wgt")
+            if ew or nw:
+                entry["wgt"] = _merge_ym_dict(ew or {}, nw or {})
+            mc[cd] = entry
+        item["countries"] = mc
+
+        # regions
+        er = eo.get("regions", {}) or {}
+        nr = ne.get("regions", {}) or {}
+        mr = {}
+        for rc in set(er) | set(nr):
+            e1 = er.get(rc, {}) or {}
+            n1 = nr.get(rc, {}) or {}
+            mr[rc] = {
+                "name": n1.get("name") or e1.get("name") or rc,
+                "exp":  _merge_ym_dict(e1.get("exp", {}), n1.get("exp", {})),
+            }
+        item["regions"] = mr
+
+        # sub_items
+        es = eo.get("sub_items", {}) or {}
+        ns = ne.get("sub_items", {}) or {}
+        if es or ns:
+            ms = {}
+            for sc in set(es) | set(ns):
+                e1 = es.get(sc, {}) or {}
+                n1 = ns.get(sc, {}) or {}
+                sub = {
+                    "name": n1.get("name") or e1.get("name") or sc,
+                    "exp":  _merge_ym_dict(e1.get("exp", {}), n1.get("exp", {})),
+                    "wgt":  _merge_ym_dict(e1.get("wgt", {}), n1.get("wgt", {})),
+                }
+                # sub_items 국가별
+                escn = e1.get("countries", {}) or {}
+                nscn = n1.get("countries", {}) or {}
+                if escn or nscn:
+                    mscn = {}
+                    for cd in set(escn) | set(nscn):
+                        ea = escn.get(cd, {}) or {}
+                        na = nscn.get(cd, {}) or {}
+                        mscn[cd] = {
+                            "name": na.get("name") or ea.get("name") or cd,
+                            "exp":  _merge_ym_dict(ea.get("exp", {}), na.get("exp", {})),
+                            "wgt":  _merge_ym_dict(ea.get("wgt", {}), na.get("wgt", {})),
+                        }
+                    sub["countries"] = mscn
+                ms[sc] = sub
+            item["sub_items"] = ms
+
+        # companies
+        eco = eo.get("companies", {}) or {}
+        nco = ne.get("companies", {}) or {}
+        if eco or nco:
+            mco = {}
+            for ck in set(eco) | set(nco):
+                ev = eco.get(ck, {}) or {}
+                nv = nco.get(ck, {}) or {}
+                comp = {"name": nv.get("name") or ev.get("name") or ck, "locations": {}}
+                el = ev.get("locations", {}) or {}
+                nl = nv.get("locations", {}) or {}
+                for lk in set(el) | set(nl):
+                    e1 = el.get(lk, {}) or {}
+                    n1 = nl.get(lk, {}) or {}
+                    comp["locations"][lk] = {
+                        "name": n1.get("name") or e1.get("name") or lk,
+                        "exp":  _merge_ym_dict(e1.get("exp", {}), n1.get("exp", {})),
+                    }
+                mco[ck] = comp
+            item["companies"] = mco
+
+        # samyang (1902 전용)
+        esa = eo.get("samyang", {}) or {}
+        nsa = ne.get("samyang", {}) or {}
+        if esa or nsa:
+            msa = {}
+            for lk in set(esa) | set(nsa):
+                e1 = esa.get(lk, {}) or {}
+                n1 = nsa.get(lk, {}) or {}
+                msa[lk] = {
+                    "name": n1.get("name") or e1.get("name") or lk,
+                    "exp":  _merge_ym_dict(e1.get("exp", {}), n1.get("exp", {})),
+                }
+            item["samyang"] = msa
+
+        merged_items[hs] = item
+    out["items"] = merged_items
+
+    # ranking_6d / hs4_names / hs2_names 등 customs_trade_v2.py가 안 만드는 키 보존
+    for k in ("ranking_6d", "hs4_names", "hs2_names",
+              "ranking_generated_at", "total_generated_at"):
+        if k in old and k not in out:
+            out[k] = old[k]
+
+    # period: start는 둘 중 더 이른 달, end는 새 데이터 우선
+    old_period = old.get("period", {}) or {}
+    new_period = new_data.get("period", {}) or {}
+    p_start = min(filter(None, [old_period.get("start"), new_period.get("start")]),
+                  default=new_period.get("start", ""))
+    p_end = new_period.get("end") or old_period.get("end", "")
+    out["period"] = {"start": p_start, "end": p_end}
+
+    return out
+
+
 def update_html(data, html_path="trade.html"):
     """trade.html의 DEMO 데이터를 실제 데이터로 교체"""
     if not os.path.exists(html_path):
@@ -575,16 +737,30 @@ def main():
     item_count = len(data["items"])
     month_count = len(data["total"]["exp"])
     print(f"\n{'='*60}")
-    print(f"수집 완료: {item_count}개 품목, {month_count}개월")
+    print(f"이번 수집: {item_count}개 품목, {month_count}개월")
 
-    # JSON 저장
+    # 기존 JSON과 머지 (옛 달 보존)
     script_dir = os.path.dirname(os.path.abspath(__file__))
     json_path = os.path.join(script_dir, "trade_data_v2.json")
+    pre_old_months = 0
+    if os.path.exists(json_path):
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                _old = json.load(f)
+            pre_old_months = len((_old.get("total", {}) or {}).get("exp", {}))
+        except Exception:
+            pass
+    data = merge_with_existing(data, json_path)
+    merged_months = len(data["total"]["exp"])
+    print(f"기존 JSON 머지 후: total {pre_old_months} → {merged_months}개월, "
+          f"items {len(data['items'])}개")
+
+    # JSON 저장 (compact: 누적되면 indent로 인한 크기 증가가 커서 separator만)
     with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+        json.dump(data, f, ensure_ascii=False, separators=(",", ":"))
     print(f"[OK] {json_path} 저장 완료 ({os.path.getsize(json_path):,} bytes)")
 
-    # HTML 업데이트
+    # HTML 업데이트 (머지 결과 임베드)
     html_path = os.path.join(script_dir, "trade.html")
     update_html(data, html_path)
 
