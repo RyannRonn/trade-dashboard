@@ -6,6 +6,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY server/ ./server/
+COPY static/ ./static/
 COPY trade.db .
 COPY trade.html .
 COPY trade_data_v2.json .
