@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""trade_data_v2.json → SQLite DB 마이그레이션 (1회성)"""
+"""trade_data_v2.json → SQLite DB 동기화 (누적형)
+
+기존 DB를 유지한 채 새 JSON의 행을 INSERT OR REPLACE로 머지한다.
+trade_data PK가 (data_type, hs_code, sub_code, entity_code, ym)이므로
+같은 (HS·국가·월) 키만 덮어쓰고, 새 JSON에 없는 옛 달은 그대로 보존된다.
+→ 매월 워크플로우가 14개월 롤링 윈도우만 수집해도 DB는 시간이 흐를수록 누적.
+"""
 import os, sys, json
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -12,13 +18,16 @@ def migrate():
         print(f"ERROR: {JSON_PATH} 파일 없음")
         sys.exit(1)
 
-    # 기존 DB 삭제 후 새로 생성
-    if os.path.exists(DB_PATH):
-        os.remove(DB_PATH)
-        print("기존 trade.db 삭제")
-
+    db_existed = os.path.exists(DB_PATH)
     init_db()
     conn = get_connection()
+    if db_existed:
+        pre = conn.execute("SELECT COUNT(*) FROM trade_data").fetchone()[0]
+        pre_min, pre_max = conn.execute(
+            "SELECT MIN(ym), MAX(ym) FROM trade_data").fetchone()
+        print(f"기존 trade.db 유지 · 현재 {pre:,}행 ({pre_min}~{pre_max}) → 머지 시작")
+    else:
+        print("trade.db 신규 생성")
 
     with open(JSON_PATH, "r", encoding="utf-8") as f:
         d = json.load(f)
@@ -177,9 +186,13 @@ def migrate():
 
     conn.commit()
 
-    # ── 검증 ──
-    print(f"\n=== 마이그레이션 완료 ===")
-    print(f"trade_data 총 행수: {td_count:,}")
+    # ── 검증 ── (DB 실제 행수 기준 / td_count는 upsert 호출 횟수라 누적 머지 시 부정확)
+    post = conn.execute("SELECT COUNT(*) FROM trade_data").fetchone()[0]
+    post_min, post_max = conn.execute(
+        "SELECT MIN(ym), MAX(ym) FROM trade_data").fetchone()
+    print(f"\n=== 머지 완료 ===")
+    print(f"trade_data 실제 행수: {post:,} ({post_min}~{post_max})")
+    print(f"이번 실행 upsert 호출수: {td_count:,}")
     for row in conn.execute(
             "SELECT data_type, COUNT(*) as cnt FROM trade_data GROUP BY data_type ORDER BY cnt DESC"):
         print(f"  {row['data_type']:15s} {row['cnt']:>8,}")
