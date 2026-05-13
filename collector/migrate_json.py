@@ -48,11 +48,24 @@ def migrate():
     print("  meta 완료")
 
     # ── 2) countries, regions ──
+    # 지역 키 형식이 코드("4145") → sgg_nm("경기도 화성시")로 변경됨에 따라
+    # 옛 PK 행이 잔존하지 않도록 매 빌드마다 클리어 (14개월 롤링이라 다음 수집에서 재채움)
+    conn.execute("DELETE FROM regions")
+    conn.execute("DELETE FROM trade_data WHERE data_type='item_region'")
     for code, name in d.get("all_countries", {}).items():
         conn.execute("INSERT OR REPLACE INTO countries VALUES (?,?)", (code, name))
-    for code, name in d.get("all_regions", {}).items():
+    # all_regions는 customs_trade_v2.py가 코드 매핑 사전을 그대로 주입하지만,
+    # 실제 키는 sgg_nm을 쓰므로 items.regions 안의 키를 모아 regions 테이블에 넣는다
+    seen_regions = {}
+    for hs, item in d.get("items", {}).items():
+        for rk, rv in item.get("regions", {}).items():
+            seen_regions[rk] = rv.get("name") or rk
+    for hs, rd in d.get("ranking_6d", {}).items():
+        for rk, rv in (rd.get("regions") or {}).items():
+            seen_regions[rk] = rv.get("name") or rk
+    for code, name in seen_regions.items():
         conn.execute("INSERT OR REPLACE INTO regions VALUES (?,?)", (code, name))
-    print(f"  countries {len(d.get('all_countries', {}))}개, regions {len(d.get('all_regions', {}))}개")
+    print(f"  countries {len(d.get('all_countries', {}))}개, regions {len(seen_regions)}개")
 
     # ── 3) hs_names ──
     hs_count = 0

@@ -313,8 +313,12 @@ def collect_nitemtrade(hs, api_key, date_ranges, want_countries):
 
 
 def get_sido_codes():
-    """시군구 수집 대상 시도 코드 (상위 3개: 경기, 인천, 서울)"""
-    return ["41", "28", "11"]
+    """시군구 수집 대상 시도 코드 (전국 17개 시도)"""
+    return [
+        "11", "26", "27", "28", "29", "30", "31", "36",
+        "41", "43", "44", "46", "47", "48", "50",
+        "51", "52",
+    ]
 
 
 def collect_sigungu(hs, hs6_codes, api_key, date_ranges):
@@ -346,17 +350,12 @@ def collect_sigungu(hs, hs6_codes, api_key, date_ranges):
 
                 time.sleep(REQUEST_DELAY)
 
-    # sggNm → 코드 매핑
+    # 응답의 모든 시군구를 sggNm("경기도 화성시" 등)을 키 + 표시명으로 그대로 사용
     regions = {}
     for sgg_nm, months in sgg_exp.items():
-        code = SGG_NAME_TO_CODE.get(sgg_nm)
-        if code and code in REGIONS:
-            if code in regions:
-                # 이미 있으면 합산
-                for ym, val in months.items():
-                    regions[code]["exp"][ym] = regions[code]["exp"].get(ym, 0) + val
-            else:
-                regions[code] = {"name": REGION_NAMES.get(code, sgg_nm), "exp": dict(months)}
+        if not sgg_nm:
+            continue
+        regions[sgg_nm] = {"name": sgg_nm, "exp": dict(months)}
 
     return regions
 

@@ -454,13 +454,18 @@ function buildCountryIndex(){
 function buildRegionIndex(){
   if(RINV)return RINV;
   RINV={};
-  for(const[hs,d]of Object.entries(D.items||{})){
-    const regs=d.regions||{};
-    for(const[rk,rv]of Object.entries(regs)){
+  const seen={}; // 지역코드 → Set(hs) — 동일 HS 중복 방지
+  function add(hs,name,regs){
+    for(const[rk,rv]of Object.entries(regs||{})){
       if(!RINV[rk])RINV[rk]={code:rk,name:rv.name||rk,items:[]};
-      RINV[rk].items.push({hs,name:d.name||hs,exp:rv.exp||{}});
+      if(!seen[rk])seen[rk]=new Set();
+      if(seen[rk].has(hs))continue;
+      seen[rk].add(hs);
+      RINV[rk].items.push({hs,name:name||hs,exp:rv.exp||{}});
     }
   }
+  for(const[hs,d]of Object.entries(D.items||{}))add(hs,d.name,d.regions);
+  for(const[hs,d]of Object.entries(D.ranking_6d||{}))add(hs,d.name,d.regions);
   return RINV;
 }
 // 공통: 인덱스 → 정렬된 [{code,name,tot,items}], 선택 보정 후 sel 반환

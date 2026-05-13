@@ -203,6 +203,12 @@ def export_db_to_json(conn, json_path):
 
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
+    # 기존 .regions(시군구 데이터)는 별도 스크립트(collect_ranking_regions.py)가 채우므로 보존
+    prev = data.get("ranking_6d", {})
+    for hs, prev_v in prev.items():
+        regs = prev_v.get("regions")
+        if regs and hs in ranking:
+            ranking[hs]["regions"] = regs
     data["ranking_6d"] = ranking
     from datetime import datetime
     data["ranking_generated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
