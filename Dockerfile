@@ -6,13 +6,16 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY server/ ./server/
+COPY collector/ ./collector/
 COPY static/ ./static/
-COPY trade.db .
 COPY trade.html .
 COPY trade_data_v2.json .
 COPY provisional.html .
 COPY provisional_data.json .
 COPY business_days.json .
+
+# trade.db는 git에 두지 않고 빌드 시 trade_data_v2.json에서 생성 (149MB > GitHub 100MB 한도 회피)
+RUN python -m collector.migrate_json
 
 EXPOSE 8000
 
