@@ -34,7 +34,7 @@ ITEMS = {
     "8703": {"name": "승용차", "countries": ["US","DE","AU","SA","CA"]},
     "8507": {"name": "2차전지", "countries": ["US","DE","HU","PL","CN"]},
     "3304": {"name": "화장품", "countries": ["US","CN","JP","VN","TH","RU","HK","MY","SG","AU","TW","ID","CA"]},
-    "1902": {"name": "라면", "countries": ["CN","US","JP","VN","PH","TH","AU","MY","ID","CA","GB","RU","DE","HK","SG","TW","NL","AE"]},
+    "1902301010": {"name": "라면", "countries": ["CN","US","JP","VN","PH","TH","AU","MY","ID","CA","GB","RU","DE","HK","SG","TW","NL","AE"], "sigungu_hs6": ["190230"], "months": 24},
     "9018": {"name": "미용의료기기", "countries": ["US","CN","JP","DE","VN","IN","BR","RU","TH","MY","AU","TR","ID","GB","SA","AE","MX","IT","NL","FR"]},
     "2710": {"name": "석유제품", "countries": ["CN","JP","SG","AU","IN"]},
     "7208": {"name": "열연강판", "countries": ["CN","VN","IN","JP","TH"]},
@@ -47,7 +47,7 @@ ITEMS = {
     "HFS": {"name": "건기식", "countries": ["US","CN","JP","VN","TH","AU","MY","HK","SG","TW","PH","ID","CA","RU","DE","AE","GB"]},
 }
 
-MAIN_ITEMS = ["8542", "ELK", "1902", "3304", "9018", "BTX", "HFS"]
+MAIN_ITEMS = ["8542", "ELK", "1902301010", "3304", "9018", "BTX", "HFS"]
 
 SUB_ITEMS = {
     "8542": {
@@ -419,10 +419,13 @@ def collect_data(api_key):
     for idx, (hs, cfg) in enumerate(all_items):
         print(f"\n[{idx+1}/{total_count}] {cfg['name']} ({hs}) 수집 중...")
 
+        # 품목별 수집 기간: cfg["months"] 지정 시 그 기간, 아니면 기본
+        item_ranges = get_date_ranges(cfg["months"]) if cfg.get("months") else date_ranges
+
         # 1) nitemtrade: 품목 총계 + 국가별 동시 수집
         print(f"  품목+국가별 데이터 수집...")
         total_exp, total_imp, countries = collect_nitemtrade(
-            hs, api_key, date_ranges, cfg.get("countries", [])
+            hs, api_key, item_ranges, cfg.get("countries", [])
         )
 
         item = {
@@ -439,12 +442,15 @@ def collect_data(api_key):
         for ym in total_imp:
             result["total"]["imp"][ym] = result["total"]["imp"].get(ym, 0) + total_imp[ym]
 
-        # 2) 시군구별: nitemtrade에서 얻은 6자리 코드를 활용
-        # 효율성을 위해 수출액 상위 3개 6자리 코드만 사용
-        hs6_codes = get_top_hs6_codes(hs, api_key, date_ranges, top_n=3)
+        # 2) 시군구별: cfg["sigungu_hs6"] 지정 시 그 6자리 코드 사용(10자리 품목 대응),
+        #    아니면 nitemtrade 응답에서 수출액 상위 3개 6자리 자동 추출
+        if cfg.get("sigungu_hs6"):
+            hs6_codes = cfg["sigungu_hs6"]
+        else:
+            hs6_codes = get_top_hs6_codes(hs, api_key, item_ranges, top_n=3)
         if hs6_codes:
-            print(f"  시군구별 수집 (상위 {len(hs6_codes)}개 HS6: {hs6_codes})...")
-            item["regions"] = collect_sigungu(hs, hs6_codes, api_key, date_ranges)
+            print(f"  시군구별 수집 (HS6: {hs6_codes})...")
+            item["regions"] = collect_sigungu(hs, hs6_codes, api_key, item_ranges)
 
         result["items"][hs] = item
         print(f"  -> {len(total_exp)}개월, 국가 {len(countries)}개, 시군구 {len(item['regions'])}개")
@@ -498,11 +504,13 @@ def collect_data(api_key):
                     "name": sname, "exp": total_exp, "wgt": total_wgt, "countries": countries
                 }
 
-    # 4) 삼양 기업 데이터 (라면 1902에 추가)
-    if "1902" in result["items"]:
+    # 4) 삼양 기업 데이터 (라면 1902301010에 추가)
+    if "1902301010" in result["items"]:
+        ramen_cfg = ITEMS.get("1902301010", {})
+        samyang_ranges = get_date_ranges(ramen_cfg["months"]) if ramen_cfg.get("months") else date_ranges
         print(f"\n삼양식품 수집 (HS {SAMYANG_CFG['hs6']})...")
-        samyang_locs = collect_samyang(api_key, date_ranges)
-        result["items"]["1902"]["samyang"] = samyang_locs
+        samyang_locs = collect_samyang(api_key, samyang_ranges)
+        result["items"]["1902301010"]["samyang"] = samyang_locs
 
     return result
 

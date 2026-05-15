@@ -855,7 +855,7 @@ function rByRegion(el){
 
 function rItem(el,hs){
   const d=(D.items||{})[hs];if(!d){el.innerHTML='<div style="text-align:center;padding:50px;color:var(--t4)">품목 없음</div>';return}
-  if(hs==="1902")return rRamen(el,d);
+  if(hs==="1902301010")return rRamen(el,d);
   const hasSub=d.sub_items&&Object.keys(d.sub_items).length>0;
   if(hasSub)return rItemSubs(el,d,hs);
   // 기본: 세부항목 없는 품목
@@ -1307,7 +1307,7 @@ function rSec(src,months,lm,totalExp,label,barColor,totalExpData,totalWgtData){
 function rRamen(el,d){
   const months=ks(d.total_exp);const lm=lt(d.total_exp);
   if(!itemSub||!["ramen_all","ramen_samyang"].includes(itemSub))itemSub="ramen_all";
-  let h=`<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap"><button class="bbtn" onclick="goTab('ranking')">← 목록</button><span style="font-size:18px;font-weight:900">${d.name}</span><span class="mono" style="color:var(--t4);font-size:12px">HS 1902</span><span class="mono" style="font-size:11px">수출 ${fn(d.total_exp[lm])} ${ch(mom(d.total_exp,lm),"MoM ")} ${ch(yoy(d.total_exp,lm),"YoY ")}</span></div>`;
+  let h=`<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap"><button class="bbtn" onclick="goTab('ranking')">← 목록</button><span style="font-size:18px;font-weight:900">${d.name}</span><span class="mono" style="color:var(--t4);font-size:12px">HS 1902301010</span><span class="mono" style="font-size:11px">수출 ${fn(d.total_exp[lm])} ${ch(mom(d.total_exp,lm),"MoM ")} ${ch(yoy(d.total_exp,lm),"YoY ")}</span></div>`;
   h+=`<div class="pills"><button class="pill ${itemSub==="ramen_all"?"on":""}" onclick="itemSub='ramen_all';rMain()">전체</button><button class="pill corp ${itemSub==="ramen_samyang"?"on":""}" onclick="itemSub='ramen_samyang';rMain()">삼양</button></div>`;
   if(itemSub==="ramen_all"){
     // 전체 수출액 + 단가

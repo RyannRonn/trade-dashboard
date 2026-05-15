@@ -165,7 +165,7 @@ def build_full_json() -> dict:
             companies = {}
             for ck, cname in all_companies[hs].items():
                 # samyang은 별도 처리
-                if hs == "1902" and ck == "samyang":
+                if hs == "1902301010" and ck == "samyang":
                     continue
                 comp = {"name": cname, "locations": {}}
                 for lk, lname in all_locs.get(hs, {}).get(ck, {}).items():
@@ -178,8 +178,8 @@ def build_full_json() -> dict:
             if companies:
                 item["companies"] = companies
 
-        # samyang (1902 전용)
-        if hs == "1902" and "samyang" in all_companies.get(hs, {}):
+        # samyang (1902301010 전용)
+        if hs == "1902301010" and "samyang" in all_companies.get(hs, {}):
             samyang = {}
             for lk, lname in all_locs.get(hs, {}).get("samyang", {}).items():
                 loc_exp = {}
