@@ -1,0 +1,55 @@
+# .github/workflows/trade-regions-update.yml
+# ranking_6d 상위 500 HS6의 시군구 데이터 수집 (분리 워크플로우)
+#
+# - 매월 16일 09:00 KST (메인 워크플로우 다음날)에 자동 실행
+# - workflow_dispatch로 수동 실행 가능
+# - 6시간 한도에 cancel돼도 collect_ranking_regions.py가 매 100 HS마다
+#   중간 commit/push 하므로 진행분이 보존됨. 다음 트리거에서 이어 진행.
+
+name: 🗺️ 시군구 지역 데이터 업데이트 (분리)
+
+on:
+  schedule:
+    # 매월 16일 오전 9시 KST (= UTC 00:00) — 메인 워크플로우 다음날
+    - cron: '0 0 16 * *'
+  workflow_dispatch:  # 수동 실행
+
+jobs:
+  regions:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+    - name: 📥 Checkout
+      uses: actions/checkout@v4
+
+    - name: 🐍 Python 설정
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: 📦 의존성 설치
+      run: pip install -r requirements.txt
+
+    - name: 🔧 Git 사용자 설정 (중간 commit용)
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+
+    - name: 🗺️ ranking_6d 상위 500 HS6 시군구 수집 (100 HS 단위 checkpoint)
+      env:
+        API_KEY: ${{ secrets.DATA_GO_KR_API_KEY }}
+        RANKING_REGIONS_TOP_N: "500"
+        RANKING_REGIONS_CHECKPOINT_EVERY: "100"
+        RANKING_REGIONS_CHECKPOINT_PUSH: "1"
+      run: python collect_ranking_regions.py
+
+    - name: 🗄️ DB 동기화
+      run: python -m collector.migrate_json
+
+    - name: 🚀 최종 Commit & Push
+      run: |
+        git add trade.html trade_data_v2.json trade.db
+        git diff --staged --quiet || git commit -m "🗺️ 시군구 데이터 최종 업데이트 $(date +'%Y-%m-%d %H:%M')"
+        git push

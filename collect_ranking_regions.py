@@ -7,7 +7,7 @@ ranking_6d 상위 HS6에 시군구별 수출 데이터 부착 (증분 수집)
 - 각 HS6에 대해 누락된 월만 수집 (증분)
 - 결과는 ranking_6d[hs].regions = {지역코드: {name, exp:{ym:USD}}} 로 누적 머지
 """
-import os, sys, io, json, time
+import os, sys, io, json, time, subprocess
 from datetime import datetime
 from collections import defaultdict
 
@@ -22,6 +22,8 @@ from customs_trade_v2 import (
 API_KEY = os.environ.get("API_KEY", "")
 TOP_N = int(os.environ.get("RANKING_REGIONS_TOP_N", "500"))
 TARGET_MONTHS = 14
+CHECKPOINT_EVERY = int(os.environ.get("RANKING_REGIONS_CHECKPOINT_EVERY", "100"))
+CHECKPOINT_PUSH = os.environ.get("RANKING_REGIONS_CHECKPOINT_PUSH", "1") == "1"
 
 
 def last_n_months(n):
@@ -116,6 +118,30 @@ def collect_sigungu_one(hs6, sido_codes, date_ranges, api_key):
     return regions
 
 
+def save_checkpoint(json_path, data, idx, total, base):
+    """현재까지의 ranking_6d를 json에 저장 + (옵션) git commit & push.
+    6h 한도 cancel에 대비한 중간 보존. 다음 트리거 때 collected_months_for_hs로 skip됨."""
+    data["ranking_regions_generated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    data["ranking_regions_progress"] = {"done": idx, "total": total}
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, separators=(",", ":"))
+    print(f"  [checkpoint] {idx}/{total} HS json 저장 완료", flush=True)
+    if not CHECKPOINT_PUSH:
+        return
+    try:
+        subprocess.run(["git", "add", "trade_data_v2.json"], cwd=base, check=True)
+        diff = subprocess.run(["git", "diff", "--staged", "--quiet"], cwd=base)
+        if diff.returncode == 0:
+            print("  [checkpoint] 변경 없음 — commit skip", flush=True)
+            return
+        msg = f"🗺️ ranking_regions 진행 {idx}/{total} HS"
+        subprocess.run(["git", "commit", "-m", msg], cwd=base, check=True)
+        subprocess.run(["git", "push"], cwd=base, check=True)
+        print(f"  [checkpoint] commit & push 완료", flush=True)
+    except subprocess.CalledProcessError as e:
+        print(f"  [checkpoint] git 실패(무시): {e}", flush=True)
+
+
 def main():
     if not API_KEY:
         print("ERROR: API_KEY 환경변수 필요", file=sys.stderr)
@@ -132,7 +158,7 @@ def main():
     print(f"ranking_6d 총 {len(ranking)}개 HS6, 메인 품목 {len(excluded)}개 제외")
 
     targets = pick_top_hs(ranking, excluded, TOP_N)
-    print(f"수출액 상위 {len(targets)}개 HS6 선정")
+    print(f"수출액 상위 {len(targets)}개 HS6 선정, checkpoint 매 {CHECKPOINT_EVERY} HS")
 
     target_months = set(last_n_months(TARGET_MONTHS))
     sido_codes = get_sido_codes()
@@ -142,6 +168,7 @@ def main():
     start_time = time.time()
     new_hs = 0
     updated_hs = 0
+    last_checkpoint = 0
 
     for idx, hs in enumerate(targets, 1):
         entry = ranking.get(hs, {"name": "", "exp": {}, "wgt": {}, "countries": {}})
@@ -181,8 +208,14 @@ def main():
             eta = elapsed / idx * (total - idx)
             print(f"  [{idx}/{total}] {pct:.0f}% — {elapsed:.0f}s 경과, 잔여 {eta:.0f}s — 신규 {new_hs}, 갱신 {updated_hs}", flush=True)
 
+        if idx - last_checkpoint >= CHECKPOINT_EVERY and idx < total:
+            data["ranking_6d"] = ranking
+            save_checkpoint(json_path, data, idx, total, base)
+            last_checkpoint = idx
+
     data["ranking_6d"] = ranking
     data["ranking_regions_generated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    data["ranking_regions_progress"] = {"done": total, "total": total}
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, separators=(",", ":"))
 

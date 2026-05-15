@@ -43,12 +43,6 @@ jobs:
         API_KEY: ${{ secrets.DATA_GO_KR_API_KEY }}
       run: python collect_ranking.py
 
-    - name: 🗺️ ranking_6d 상위 500 HS6 시군구 수집
-      env:
-        API_KEY: ${{ secrets.DATA_GO_KR_API_KEY }}
-        RANKING_REGIONS_TOP_N: "500"
-      run: python collect_ranking_regions.py
-
     - name: 🗄️ DB 동기화
       run: python -m collector.migrate_json
 
