@@ -40,6 +40,13 @@ jobs:
         API_KEY: ${{ secrets.DATA_GO_KR_API_KEY }}
       run: python customs_trade_v2.py
 
+    # 한국 전체 total은 ranking_6d 수집(호출량 큼)보다 먼저 실행한다.
+    # 뒤로 두면 data.go.kr 일일 호출 쿼터가 소진돼 빈 결과가 나올 수 있음.
+    - name: 🇰🇷 한국 전체 수출입 총액 (HS2 99개 합산)
+      env:
+        API_KEY: ${{ secrets.DATA_GO_KR_API_KEY }}
+      run: python collect_korea_total.py
+
     - name: 📈 ranking_6d 증분 수집 (전 5,465 HS6)
       env:
         API_KEY: ${{ secrets.DATA_GO_KR_API_KEY }}
@@ -47,11 +54,6 @@ jobs:
 
     - name: 🗄️ DB 동기화
       run: python -m collector.migrate_json
-
-    - name: 🇰🇷 한국 전체 수출입 총액 (HS2 99개 합산)
-      env:
-        API_KEY: ${{ secrets.DATA_GO_KR_API_KEY }}
-      run: python collect_korea_total.py
 
     - name: 🚀 Commit & Push
       run: |

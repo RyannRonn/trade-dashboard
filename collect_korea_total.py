@@ -113,10 +113,36 @@ def main():
     for ym in sorted(exp_total.keys()):
         print(f"  {ym}: exp={exp_total[ym]:>15,} imp={imp_total[ym]:>15,}")
 
-    # DB 갱신 (PK가 (data_type, ym)이라 INSERT OR REPLACE = 자연 누적)
+    # ── 안전장치: 수집 실패/미집계 월 감지 ──
+    # 한국 월간 수출은 최소 $20B 수준. 그보다 작은 월은 수집 실패(API 쿼터
+    # 소진/LOCK) 또는 미집계(아직 안 끝난 당월)이므로 제외한다.
+    # 정상 월이 하나도 없으면 total을 건드리지 않고 비정상 종료해서
+    # workflow가 눈에 띄게 실패하도록 한다 (조용히 garbage를 쓰지 않음).
+    SANITY_MIN_EXP = 20_000_000_000  # $20B
+    valid = sorted(ym for ym in exp_total if exp_total[ym] >= SANITY_MIN_EXP)
+    dropped = sorted(set(exp_total) - set(valid))
+    if dropped:
+        print(f"⚠️ 비정상/미집계 월 제외 ({len(dropped)}개): {dropped}")
+    if not valid:
+        print("ERROR: 정상 수집된 월이 없습니다 (API 쿼터 소진/LOCK 의심). "
+              "total을 갱신하지 않고 중단합니다.", file=sys.stderr)
+        sys.exit(1)
+
+    # DB 갱신: 옛 garbage 행을 모두 지우고 이번에 정상 수집된 월만 기록
     con = sqlite3.connect(db_path)
+    con.execute("""CREATE TABLE IF NOT EXISTS trade_data (
+        data_type   TEXT NOT NULL,
+        hs_code     TEXT NOT NULL DEFAULT '',
+        sub_code    TEXT NOT NULL DEFAULT '',
+        entity_code TEXT NOT NULL DEFAULT '',
+        ym          TEXT NOT NULL,
+        exp_usd     INTEGER DEFAULT 0,
+        imp_usd     INTEGER DEFAULT 0,
+        wgt         INTEGER DEFAULT 0,
+        PRIMARY KEY (data_type, hs_code, sub_code, entity_code, ym))""")
+    con.execute("DELETE FROM trade_data WHERE data_type='total'")
     rows = [("total", "", "", "", ym, exp_total[ym], imp_total[ym], 0)
-            for ym in exp_total]
+            for ym in valid]
     con.executemany(
         "INSERT OR REPLACE INTO trade_data "
         "(data_type, hs_code, sub_code, entity_code, ym, exp_usd, imp_usd, wgt) "
@@ -124,29 +150,22 @@ def main():
         rows
     )
     con.commit()
-    print(f"DB trade_data 'total' {len(rows)}행 갱신 (이번 수집분)")
-
-    # JSON 갱신: DB에 누적된 전체 월을 dump (옛 달 보존)
-    cur = con.execute(
-        "SELECT ym, exp_usd, imp_usd FROM trade_data "
-        "WHERE data_type='total' ORDER BY ym")
-    db_exp, db_imp = {}, {}
-    for ym, e, i in cur:
-        db_exp[ym] = e
-        db_imp[ym] = i
     con.close()
+    print(f"DB trade_data 'total' {len(rows)}개월 갱신")
 
+    # JSON 갱신: 이번에 정상 수집된 월만 기록 (옛 garbage 누출 방지)
     with open(json_path, "r", encoding="utf-8") as f:
         d = json.load(f)
-    d.setdefault("total", {"exp": {}, "imp": {}})
-    d["total"]["exp"] = db_exp
-    d["total"]["imp"] = db_imp
+    d["total"] = {
+        "exp": {ym: exp_total[ym] for ym in valid},
+        "imp": {ym: imp_total[ym] for ym in valid},
+    }
     from datetime import datetime
     d["total_generated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(d, f, ensure_ascii=False, separators=(",", ":"))
-    print(f"trade_data_v2.json 'total' DB 전체({len(db_exp)}개월) dump 완료 "
-          f"({os.path.getsize(json_path):,} bytes)")
+    print(f"trade_data_v2.json 'total' {len(valid)}개월"
+          f"({valid[0]}~{valid[-1]}) 갱신 완료 ({os.path.getsize(json_path):,} bytes)")
     print("DONE")
 
 
