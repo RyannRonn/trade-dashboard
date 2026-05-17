@@ -253,9 +253,15 @@ def parse_ym_from_priod(priod):
 
 
 def safe_int(v):
-    """문자열 → 정수 (공백, None 처리)"""
+    """문자열 → 정수 (공백, 천단위 콤마, None 처리)
+
+    sigungu API(getSigunguPerPrlstPerAcrs)의 expUsdAmt는 값이 1,000 이상이면
+    천단위 콤마를 넣어 반환한다("48,734"). 콤마를 제거하지 않으면 float()가
+    ValueError를 던져 큰 시군구 수출이 통째로 0 처리·폐기된다.
+    (nitemtrade의 expDlr 등은 콤마 없는 형식이라 replace는 no-op)
+    """
     try:
-        return round(float(str(v or "0").strip() or "0"))
+        return round(float(str(v or "0").strip().replace(",", "") or "0"))
     except (ValueError, TypeError):
         return 0
 

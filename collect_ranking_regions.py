@@ -24,6 +24,11 @@ TOP_N = int(os.environ.get("RANKING_REGIONS_TOP_N", "500"))
 TARGET_MONTHS = 14
 CHECKPOINT_EVERY = int(os.environ.get("RANKING_REGIONS_CHECKPOINT_EVERY", "100"))
 CHECKPOINT_PUSH = os.environ.get("RANKING_REGIONS_CHECKPOINT_PUSH", "1") == "1"
+# RANKING_REGIONS_RESET=1 이면 시작 시 ranking_6d[*].regions를 모두 비우고
+# 처음부터 재수집한다. 증분 수집(collected_months_for_hs)은 이미 수집된 ym을
+# skip하므로, expUsdAmt 콤마버그로 큰 시군구가 누락된 옛 데이터는 reset 없이는
+# 영영 보정되지 않는다. 콤마버그 수정 반영 시 1회만 켜고 이후 끈다.
+RESET = os.environ.get("RANKING_REGIONS_RESET", "0") == "1"
 
 
 def last_n_months(n):
@@ -156,6 +161,15 @@ def main():
     items = data.get("items", {})
     excluded = set(items.keys())  # 메인 품목 HS는 items.regions에 이미 있음
     print(f"ranking_6d 총 {len(ranking)}개 HS6, 메인 품목 {len(excluded)}개 제외")
+
+    if RESET:
+        cleared = 0
+        for v in ranking.values():
+            if v.get("regions"):
+                v["regions"] = {}
+                cleared += 1
+        data.pop("ranking_regions_progress", None)
+        print(f"[RESET] ranking_6d {cleared}개 HS의 regions 초기화 — 처음부터 재수집")
 
     targets = pick_top_hs(ranking, excluded, TOP_N)
     print(f"수출액 상위 {len(targets)}개 HS6 선정, checkpoint 매 {CHECKPOINT_EVERY} HS")

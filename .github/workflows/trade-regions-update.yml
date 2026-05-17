@@ -13,6 +13,11 @@ on:
     # 매월 16일 오전 9시 KST (= UTC 00:00) — 메인 워크플로우 다음날
     - cron: '0 0 16 * *'
   workflow_dispatch:  # 수동 실행
+    inputs:
+      reset:
+        description: 'ranking_6d.regions 전체 초기화 후 재수집 (expUsdAmt 콤마버그 보정용 — 1회만 체크)'
+        type: boolean
+        default: false
 
 jobs:
   regions:
@@ -43,6 +48,8 @@ jobs:
         RANKING_REGIONS_TOP_N: "500"
         RANKING_REGIONS_CHECKPOINT_EVERY: "100"
         RANKING_REGIONS_CHECKPOINT_PUSH: "1"
+        # reset 입력 체크 시에만 1 — schedule 실행은 항상 0(증분)
+        RANKING_REGIONS_RESET: ${{ inputs.reset == true && '1' || '0' }}
       run: python collect_ranking_regions.py
 
     - name: 🗄️ DB 동기화
