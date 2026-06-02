@@ -68,6 +68,12 @@ async def business_days():
                         media_type="application/json")
 
 
+@app.get("/confirmed_companies.json")
+async def confirmed_companies():
+    return FileResponse(os.path.join(BASE_DIR, "confirmed_companies.json"),
+                        media_type="application/json")
+
+
 @app.get("/static/{name}")
 async def static_file(name: str):
     """국가 메타·세계 GeoJSON 등 정적 자산 (지도 시각화용)."""

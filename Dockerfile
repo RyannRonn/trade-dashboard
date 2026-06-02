@@ -13,6 +13,7 @@ COPY trade_data_v2.json .
 COPY provisional.html .
 COPY provisional_data.json .
 COPY business_days.json .
+COPY confirmed_companies.json .
 
 # trade.db는 git에 두지 않고 빌드 시 trade_data_v2.json에서 생성 (149MB > GitHub 100MB 한도 회피)
 RUN python -m collector.migrate_json
