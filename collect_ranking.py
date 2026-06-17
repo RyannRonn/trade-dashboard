@@ -218,6 +218,50 @@ def export_db_to_json(conn, json_path):
     return len(ranking), cnt_country
 
 
+def seed_db_from_json(conn, json_path):
+    """커밋된 trade_data_v2.json의 ranking_6d를 DB에 시드.
+    CI에서 trade.db가 없을 때(매번 빈 상태) 증분이 동작하도록 기존 월을 DB에 채운다."""
+    if not os.path.exists(json_path):
+        return 0
+    try:
+        data = json.load(open(json_path, encoding="utf-8"))
+    except Exception:
+        return 0
+    rk = data.get("ranking_6d", {}) or {}
+    rows, crows = [], []
+    for hs6, info in rk.items():
+        name = info.get("name", "")
+        wgt = info.get("wgt", {}) or {}
+        for ym, v in (info.get("exp", {}) or {}).items():
+            rows.append((hs6, ym, name, v, wgt.get(ym, 0)))
+        for cd, cinfo in (info.get("countries", {}) or {}).items():
+            cnm = cinfo.get("name", "")
+            cwgt = cinfo.get("wgt", {}) or {}
+            for ym, v in (cinfo.get("exp", {}) or {}).items():
+                crows.append((hs6, ym, cd, cnm, v, cwgt.get(ym, 0)))
+    if rows:
+        conn.executemany(
+            "INSERT OR REPLACE INTO ranking_6d (hs_code, ym, name, exp_usd, wgt_kg) VALUES (?,?,?,?,?)", rows)
+    if crows:
+        conn.executemany(
+            "INSERT OR REPLACE INTO ranking_6d_country (hs_code, ym, country_cd, country_nm, exp_usd, wgt_kg) VALUES (?,?,?,?,?,?)", crows)
+    conn.commit()
+    return len(rows)
+
+
+def _recent_window(n):
+    """현재월 기준 최근 n개월 YYYYMM 집합."""
+    now = datetime.now()
+    y, m = now.year, now.month
+    out = set()
+    for _ in range(n):
+        out.add(f"{y}{m:02d}")
+        m -= 1
+        if m < 1:
+            m = 12; y -= 1
+    return out
+
+
 def main():
     if not API_KEY:
         print("ERROR: API_KEY 환경변수 필요", file=sys.stderr)
@@ -226,10 +270,23 @@ def main():
     base = os.path.dirname(os.path.abspath(__file__))
     json_path = os.path.join(base, "trade_data_v2.json")
     db_path = os.path.join(base, "trade.db")
+    FULL_REBUILD = os.environ.get("FULL_REBUILD") == "1"
+    RECENT_MONTHS = int(os.environ.get("RECENT_MONTHS", "3"))
 
     # DB 초기화 및 기존 수집 월 조회
     conn = init_db(db_path)
     existing_months = get_existing_months_from_db(conn)
+
+    # CI에서 trade.db가 비어있으면 커밋된 JSON에서 시드 → 증분 가능
+    if not existing_months and not FULL_REBUILD:
+        seeded = seed_db_from_json(conn, json_path)
+        if seeded:
+            existing_months = get_existing_months_from_db(conn)
+            print(f"trade.db 비어있음 → JSON에서 {seeded:,}행 시드 (기존월 {len(existing_months)}개)", flush=True)
+
+    # revision 윈도우: 최근 N개월은 이미 있어도 다시 수집(확정치 소급수정 반영)
+    if existing_months and not FULL_REBUILD:
+        existing_months = existing_months - _recent_window(RECENT_MONTHS)
 
     # 수집할 월 계산
     missing = get_months_to_collect(existing_months)

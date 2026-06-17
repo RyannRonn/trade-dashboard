@@ -162,6 +162,67 @@ def get_date_ranges(months=14):
     return ranges
 
 
+RECENT_MONTHS = int(os.environ.get("RECENT_MONTHS", "3"))
+FULL_REBUILD = os.environ.get("FULL_REBUILD") == "1"
+
+
+def _ym_add(ym, delta):
+    """'YYYYMM'에 delta개월 더한 'YYYYMM'."""
+    y, m = int(ym[:4]), int(ym[4:])
+    idx = y * 12 + (m - 1) + delta
+    return f"{idx // 12}{idx % 12 + 1:02d}"
+
+
+def _window_ranges(start_ym, end_ym):
+    """start~end(YYYYMM 포함) 구간을 12개월 이하 청크로 분할. 최신 청크가 [0]."""
+    months = []
+    cur = start_ym
+    while cur <= end_ym:
+        months.append(cur)
+        cur = _ym_add(cur, 1)
+    ranges = []
+    i = len(months)
+    while i > 0:
+        chunk = months[max(0, i - 12):i]
+        ranges.append((chunk[0], chunk[-1]))
+        i -= 12
+    return ranges
+
+
+def existing_months_in_json(json_path):
+    """기존 trade_data_v2.json에 이미 들어있는 월(YYYYMM) 집합."""
+    if not os.path.exists(json_path):
+        return set()
+    try:
+        old = json.load(open(json_path, encoding="utf-8"))
+    except Exception:
+        return set()
+    yms = set((old.get("total", {}) or {}).get("exp", {}).keys())
+    if not yms:
+        for it in (old.get("items", {}) or {}).values():
+            yms.update((it.get("total_exp") or {}).keys())
+    return yms
+
+
+def get_incremental_ranges(json_path, recent=None, full=14):
+    """기존 JSON 있으면 최근 recent개월(공백 있으면 보충), 없거나 FULL_REBUILD면 full개월 전체.
+    반환: (ranges, is_full). 머지는 merge_with_existing가 옛 달을 보존한다."""
+    recent = recent or RECENT_MONTHS
+    existing = set() if FULL_REBUILD else existing_months_in_json(json_path)
+    if not existing:
+        return get_date_ranges(full), True
+    now = datetime.now()
+    end = f"{now.year}{now.month:02d}"
+    start = _ym_add(end, -(recent - 1))
+    latest = max(existing)
+    # 마지막 수집월과 윈도우 사이에 공백이 생기면 start를 당겨 메운다
+    if _ym_add(latest, 1) < start:
+        start = _ym_add(latest, -(recent - 1))
+    if start > end:
+        start = end
+    return _window_ranges(start, end), False
+
+
 def api_call_xml(path, params, api_key):
     """관세청 API 호출 (XML 기본, 재시도 포함)"""
     query_params = {
@@ -401,10 +462,13 @@ def collect_samyang(api_key, date_ranges):
 
 
 def collect_data(api_key):
-    """전체 데이터 수집"""
-    date_ranges = get_date_ranges(14)
+    """전체 데이터 수집 (증분: 기존 JSON 있으면 최근 N개월만, 옛 달은 merge_with_existing가 보존)"""
+    json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "trade_data_v2.json")
+    date_ranges, is_full = get_incremental_ranges(json_path)
     overall_start = date_ranges[-1][0] if date_ranges else ""
     overall_end = date_ranges[0][1] if date_ranges else ""
+    mode = "전체 재수집(14개월)" if is_full else f"증분(최근 {RECENT_MONTHS}개월+공백)"
+    print(f"수집 모드: {mode}")
     print(f"수집 기간: {overall_start} ~ {overall_end}")
     print(f"구간 분할: {date_ranges}")
 
@@ -426,7 +490,7 @@ def collect_data(api_key):
         print(f"\n[{idx+1}/{total_count}] {cfg['name']} ({hs}) 수집 중...")
 
         # 품목별 수집 기간: cfg["months"] 지정 시 그 기간, 아니면 기본
-        item_ranges = get_date_ranges(cfg["months"]) if cfg.get("months") else date_ranges
+        item_ranges = get_date_ranges(cfg["months"]) if (is_full and cfg.get("months")) else date_ranges
 
         # 1) nitemtrade: 품목 총계 + 국가별 동시 수집
         print(f"  품목+국가별 데이터 수집...")
@@ -513,7 +577,7 @@ def collect_data(api_key):
     # 4) 삼양 기업 데이터 (라면 1902301010에 추가)
     if "1902301010" in result["items"]:
         ramen_cfg = ITEMS.get("1902301010", {})
-        samyang_ranges = get_date_ranges(ramen_cfg["months"]) if ramen_cfg.get("months") else date_ranges
+        samyang_ranges = get_date_ranges(ramen_cfg["months"]) if (is_full and ramen_cfg.get("months")) else date_ranges
         print(f"\n삼양식품 수집 (HS {SAMYANG_CFG['hs6']})...")
         samyang_locs = collect_samyang(api_key, samyang_ranges)
         result["items"]["1902301010"]["samyang"] = samyang_locs

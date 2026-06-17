@@ -13,11 +13,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from customs_trade_v2 import api_call_xml, parse_ym_from_year, safe_int
+from customs_trade_v2 import api_call_xml, parse_ym_from_year, safe_int, get_incremental_ranges
 
 API_KEY = os.environ.get("API_KEY", "")
 TARGET_MONTHS = 14
 WORKERS = int(os.environ.get("WORKERS", "5"))
+FULL_REBUILD = os.environ.get("FULL_REBUILD") == "1"
 
 
 def get_target_months():
@@ -79,9 +80,19 @@ def main():
     json_path = os.path.join(base, "trade_data_v2.json")
     db_path = os.path.join(base, "trade.db")
 
-    months = get_target_months()
-    ranges = make_ranges(months)
-    print(f"수집 월: {months[0]}~{months[-1]} ({len(months)}개월), 구간 {ranges}")
+    # 증분: 기존 JSON total에 든 월 기준 최근 N개월만(없으면 14개월 전체)
+    ranges, is_full = get_incremental_ranges(json_path)
+    months = []
+    for s, e in ranges:
+        cur = s
+        while cur <= e:
+            months.append(cur)
+            yy, mm = int(cur[:4]), int(cur[4:]); mm += 1
+            if mm > 12: mm = 1; yy += 1
+            cur = f"{yy}{mm:02d}"
+    months = sorted(months)
+    mode = "전체(14개월)" if is_full else f"증분(최근 {len(months)}개월)"
+    print(f"수집 모드: {mode} — {months[0]}~{months[-1]}, 구간 {ranges}")
 
     hs2_list = [f"{i:02d}" for i in range(1, 100)]  # 01~99
     print(f"HS2 {len(hs2_list)}개 호출 (worker={WORKERS})...")
@@ -140,7 +151,12 @@ def main():
         imp_usd     INTEGER DEFAULT 0,
         wgt         INTEGER DEFAULT 0,
         PRIMARY KEY (data_type, hs_code, sub_code, entity_code, ym))""")
-    con.execute("DELETE FROM trade_data WHERE data_type='total'")
+    if is_full:
+        con.execute("DELETE FROM trade_data WHERE data_type='total'")
+    else:
+        # 증분: 이번에 수집한 월만 교체(옛 월 보존)
+        con.executemany("DELETE FROM trade_data WHERE data_type='total' AND ym=?",
+                        [(ym,) for ym in valid])
     rows = [("total", "", "", "", ym, exp_total[ym], imp_total[ym], 0)
             for ym in valid]
     con.executemany(
@@ -156,10 +172,15 @@ def main():
     # JSON 갱신: 이번에 정상 수집된 월만 기록 (옛 garbage 누출 방지)
     with open(json_path, "r", encoding="utf-8") as f:
         d = json.load(f)
-    d["total"] = {
-        "exp": {ym: exp_total[ym] for ym in valid},
-        "imp": {ym: imp_total[ym] for ym in valid},
-    }
+    old_total = d.get("total", {}) or {}
+    if is_full or not old_total.get("exp"):
+        new_exp = {ym: exp_total[ym] for ym in valid}
+        new_imp = {ym: imp_total[ym] for ym in valid}
+    else:
+        # 증분: 기존 total에 이번 수집월만 덮어쓰기(옛 월 보존)
+        new_exp = dict(old_total.get("exp", {})); new_exp.update({ym: exp_total[ym] for ym in valid})
+        new_imp = dict(old_total.get("imp", {})); new_imp.update({ym: imp_total[ym] for ym in valid})
+    d["total"] = {"exp": new_exp, "imp": new_imp}
     from datetime import datetime
     d["total_generated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with open(json_path, "w", encoding="utf-8") as f:
