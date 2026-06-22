@@ -142,6 +142,21 @@ function getC(sec, ym, p) {
 function getW(sec, ym, p) {
   return sec?.[ym]?.[p]?.w ?? null;
 }
+// 구간(10일치) 단가 = 해당 구간 증분 수출$(v) ÷ 증분 중량(w - 이전 cut의 w)
+// 누적 단가(c/w)가 아니라 그 10일 동안의 실제 단가
+function periodPrice(sec, ym, p) {
+  const order = ["10","20","30"];
+  const idx = order.indexOf(p);
+  const e = sec?.[ym]?.[p];
+  if (!e || e.w == null) return null;
+  const prev = idx > 0 ? sec?.[ym]?.[order[idx-1]] : null;
+  const prevW = prev?.w ?? 0;
+  // 증분 수출$: v 우선, 없으면 c - 이전 c
+  let dExp = e.v;
+  if (dExp == null) dExp = (e.c != null) ? e.c - (prev?.c ?? 0) : null;
+  const dW = e.w - prevW;
+  return (dExp != null && dW > 0) ? dExp / dW : null;
+}
 
 // YoY for same period comparison
 function yoyP(sec, ym, p) {
@@ -556,7 +571,7 @@ function rSheet(el, sn, prefixH) {
   // 3. Daily export + Price
   h += '<div class="cg">';
   h += '<div class="cb"><h4>일일수출액 추이</h4><canvas id="sh_daily"></canvas></div>';
-  h += '<div class="cb"><h4>단가 (USD/kg)</h4><canvas id="sh_price"></canvas></div>';
+  h += '<div class="cb"><h4>10일 구간 단가 (USD/kg)</h4><canvas id="sh_price"></canvas></div>';
   h += '</div>';
 
   // 3. Data table
@@ -718,9 +733,8 @@ function rSheet(el, sn, prefixH) {
     const timeline = [];
     for (const m of rm) {
       for (const p of ["10","20","30"]) {
-        const c = getC(sec, m, p);
-        const w = getW(sec, m, p);
-        if (c && w && w > 0) timeline.push({label: fy(m)+" ~"+p, price: c/w});
+        const pr = periodPrice(sec, m, p);
+        if (pr != null) timeline.push({label: fy(m)+" ~"+p, price: pr});
       }
     }
     if (timeline.length) {
@@ -729,7 +743,7 @@ function rSheet(el, sn, prefixH) {
         data: {
           labels: timeline.map(t => t.label),
           datasets: [{
-            label: "단가 (USD/kg)",
+            label: "단가 (USD/kg, 10일 구간)",
             data: timeline.map(t => t.price),
             borderColor: "#e8a830",
             backgroundColor: "rgba(232,168,48,.1)",
