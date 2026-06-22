@@ -712,33 +712,36 @@ function rSheet(el, sn, prefixH) {
     }));
   }
 
-  // Price chart
+  // Price chart — 월×기간(10/20/30일)을 한 줄로 펼친 연속 시계열
   const prCtx = document.getElementById("sh_price");
   if (prCtx) {
-    const ds = ["30","20","10"].filter(p => {
-      return rm.some(m => {
+    const timeline = [];
+    for (const m of rm) {
+      for (const p of ["10","20","30"]) {
         const c = getC(sec, m, p);
         const w = getW(sec, m, p);
-        return c && w && w > 0;
-      });
-    }).map(p => ({
-      label: "~"+p+"일",
-      data: rm.map(m => {
-        const c = getC(sec, m, p);
-        const w = getW(sec, m, p);
-        return (c && w && w > 0) ? c/w : null;
-      }),
-      borderColor: PCOL[p],
-      borderWidth: 2, tension: .3, pointRadius: 2, fill: false, spanGaps: true
-    }));
-    if (ds.length) {
+        if (c && w && w > 0) timeline.push({label: fy(m)+" ~"+p, price: c/w});
+      }
+    }
+    if (timeline.length) {
       charts.push(new Chart(prCtx, {
         type: "line",
-        data: { labels: rm.map(fy), datasets: ds },
+        data: {
+          labels: timeline.map(t => t.label),
+          datasets: [{
+            label: "단가 (USD/kg)",
+            data: timeline.map(t => t.price),
+            borderColor: "#e8a830",
+            backgroundColor: "rgba(232,168,48,.1)",
+            borderWidth: 2, tension: .3, pointRadius: 1.5,
+            pointBackgroundColor: "#e8a830", fill: false, spanGaps: true
+          }]
+        },
         options: {
           responsive: true,
-          plugins:{legend:{labels:{boxWidth:10}}},
-          scales:{y:{ticks:{callback:v=>"$"+v.toFixed(1)}},x:{grid:{display:false}}}
+          interaction:{mode:"index",intersect:false},
+          plugins:{legend:{labels:{boxWidth:10}},tooltip:{callbacks:{label:c=>"$"+c.parsed.y.toFixed(2)+"/kg"}}},
+          scales:{y:{ticks:{callback:v=>"$"+v.toFixed(1)}},x:{grid:{display:false},ticks:{maxRotation:45,font:{size:8}}}}
         }
       }));
     }
