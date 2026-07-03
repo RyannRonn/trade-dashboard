@@ -414,32 +414,52 @@ function rRanking(el){
   const months=[...allM].sort();const lm=months[months.length-1];
   if(!lm){el.innerHTML='<div style="text-align:center;padding:50px;color:var(--t4)">데이터 없음</div>';return}
   const MIN_EXP=1000000;
+  const isPrice=(rankSort==="pyoy"||rankSort==="pmom");
   let rows=[];for(const[hs,d]of Object.entries(R)){
     const e=d.exp||{};const val=e[lm]||0;if(val<MIN_EXP)continue;
+    const w=d.wgt||{};
+    // 단가(USD/kg) 시계열 — 중량>0 & 수출>0. 중량 오보로 인한 단가 폭주(아티팩트) 차단:
+    // 해당 HS 단가 중앙값의 [1/6, 6]배 범위 밖 월은 제외
+    const praw={};for(const m in e){const wm=w[m]||0;if(wm>0&&e[m]>0)praw[m]=e[m]/wm;}
+    const pv=Object.values(praw).sort((a,b)=>a-b);
+    const medP=pv.length?pv[Math.floor((pv.length-1)/2)]:0;
+    const pr={};if(medP>0)for(const m in praw){const p=praw[m];if(p>=medP/6&&p<=medP*6)pr[m]=p;}
+    const hasPrice=Object.keys(pr).length>0;
     const hs4=hs.slice(0,4);const hs2=hs.slice(0,2);let nm4=N4[hs4]||"";let nm2=N2[hs2]||"";
-    rows.push({hs,hs4,hs2,name:d.name||hs,nm4,nm2,val,mom:mom(e,lm),yoy:yoy(e,lm),exp:e});
+    rows.push({hs,hs4,hs2,name:d.name||hs,nm4,nm2,val,mom:mom(e,lm),yoy:yoy(e,lm),exp:e,
+      pr,price:hasPrice&&pr[lm]!=null?pr[lm]:null,pyoy:hasPrice?yoy(pr,lm):null,pmom:hasPrice?mom(pr,lm):null});
   }
-  if(rankSort==="yoy")rows.sort((a,b)=>(b.yoy||0)-(a.yoy||0));
-  else if(rankSort==="mom")rows.sort((a,b)=>(b.mom||0)-(a.mom||0));
-  else rows.sort((a,b)=>b.val-a.val);
-  const maxV=Math.max(...rows.map(r=>r.val),1);
-  let h=`<div class="st"><span class="d" style="background:var(--rd)"></span>6자리 HS 수출 변동률 (${fy(lm)}) — ${rows.length}개 (100만USD↑)</div>`;
-  h+=`<div class="pills"><button class="pill ${rankSort==="yoy"?"on":""}" onclick="rankSort='yoy';rMain()">YoY순</button><button class="pill ${rankSort==="mom"?"on":""}" onclick="rankSort='mom';rMain()">MoM순</button><button class="pill ${rankSort==="val"?"on":""}" onclick="rankSort='val';rMain()">금액순</button></div>`;
-  h+='<div class="ts"><table class="dt" style="table-layout:fixed;width:100%"><thead><tr><th style="width:30px">#</th><th style="width:52px">HS</th><th style="text-align:left">대분류</th><th style="text-align:left">분류</th><th style="text-align:left">품목</th><th>수출액</th><th>YoY</th><th>MoM</th></tr></thead><tbody>';
+  let disp=[...rows];
+  if(rankSort==="pyoy"){disp=disp.filter(r=>r.pyoy!=null&&isFinite(r.pyoy));disp.sort((a,b)=>b.pyoy-a.pyoy);}
+  else if(rankSort==="pmom"){disp=disp.filter(r=>r.pmom!=null&&isFinite(r.pmom));disp.sort((a,b)=>b.pmom-a.pmom);}
+  else if(rankSort==="yoy")disp.sort((a,b)=>(b.yoy||0)-(a.yoy||0));
+  else if(rankSort==="mom")disp.sort((a,b)=>(b.mom||0)-(a.mom||0));
+  else disp.sort((a,b)=>b.val-a.val);
+  let h=`<div class="st"><span class="d" style="background:var(--rd)"></span>6자리 HS ${isPrice?"단가(USD/kg) 변동률":"수출 변동률"} (${fy(lm)}) — ${disp.length}개 (수출 100만USD↑${isPrice?" · 단가 산출 가능 품목만, 중량 이상치 제외":""})</div>`;
+  h+=`<div class="pills"><button class="pill ${rankSort==="yoy"?"on":""}" onclick="rankSort='yoy';rMain()">수출YoY순</button><button class="pill ${rankSort==="mom"?"on":""}" onclick="rankSort='mom';rMain()">수출MoM순</button><button class="pill ${rankSort==="val"?"on":""}" onclick="rankSort='val';rMain()">금액순</button><button class="pill ${rankSort==="pyoy"?"on":""}" onclick="rankSort='pyoy';rMain()">단가YoY순</button><button class="pill ${rankSort==="pmom"?"on":""}" onclick="rankSort='pmom';rMain()">단가MoM순</button></div>`;
+  h+='<div class="ts"><table class="dt" style="table-layout:fixed;width:100%;min-width:780px"><thead><tr><th style="width:30px">#</th><th style="width:50px">HS</th><th style="text-align:left">대분류</th><th style="text-align:left">분류</th><th style="text-align:left">품목</th><th style="width:62px">수출액</th><th style="width:54px">YoY</th><th style="width:54px">MoM</th><th style="width:56px">단가</th><th style="width:58px">단가YoY</th><th style="width:58px">단가MoM</th></tr></thead><tbody>';
   const tc="overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
-  rows.forEach((r,i)=>{
-    h+=`<tr class="ck" onclick="searchGo('${r.hs}')"><td>${i+1}</td><td class="mono" style="color:var(--t4)">${r.hs}</td><td style="${tc};text-align:left" title="${r.nm2}">${r.nm2}</td><td style="${tc};text-align:left" title="${(N4[r.hs4]||"").replace(/"/g,"&quot;")}">${r.nm4}</td><td style="${tc};text-align:left;font-family:Noto Sans KR" title="${r.name}">${r.name}</td><td>${fn(r.val)}</td><td>${chB(r.yoy)}</td><td>${chB(r.mom)}</td></tr>`});
+  disp.forEach((r,i)=>{
+    h+=`<tr class="ck" onclick="searchGo('${r.hs}')"><td>${i+1}</td><td class="mono" style="color:var(--t4)">${r.hs}</td><td style="${tc};text-align:left" title="${r.nm2}">${r.nm2}</td><td style="${tc};text-align:left" title="${(N4[r.hs4]||"").replace(/"/g,"&quot;")}">${r.nm4}</td><td style="${tc};text-align:left;font-family:Noto Sans KR" title="${r.name}">${r.name}</td><td>${fn(r.val)}</td><td>${chB(r.yoy)}</td><td>${chB(r.mom)}</td><td class="mono">${r.price!=null?r.price.toFixed(2):"—"}</td><td>${chB(r.pyoy)}</td><td>${chB(r.pmom)}</td></tr>`});
   h+='</tbody></table></div>';
-  const yoyRows=[...rows].filter(r=>r.yoy!=null&&r.yoy!==0);
-  const momRows=[...rows].filter(r=>r.mom!=null&&r.mom!==0);
-  const yoyTop=[...yoyRows].sort((a,b)=>(b.yoy||0)-(a.yoy||0)).slice(0,15);
-  const momTop=[...momRows].sort((a,b)=>(b.mom||0)-(a.mom||0)).slice(0,15);
-  h+='<div class="cg"><div class="cb"><h4>YoY 급등 TOP 15</h4><canvas id="rk1"></canvas></div><div class="cb"><h4>MoM 급등 TOP 15</h4><canvas id="rk2"></canvas></div></div>';
+  let c1items,c2items,c1title,c2title,valFn,fmtFn;
+  if(isPrice){
+    c1items=[...rows].filter(r=>r.pyoy!=null&&isFinite(r.pyoy)&&r.pyoy!==0).sort((a,b)=>b.pyoy-a.pyoy).slice(0,15);
+    c2items=[...rows].filter(r=>r.pmom!=null&&isFinite(r.pmom)&&r.pmom!==0).sort((a,b)=>b.pmom-a.pmom).slice(0,15);
+    c1title="단가 YoY 급등 TOP 15";c2title="단가 MoM 급등 TOP 15";
+    valFn=(r,m)=>(r.pr[m]!=null?r.pr[m]:null);fmtFn=v=>v!=null?(+v).toFixed(2):"";
+  }else{
+    c1items=[...rows].filter(r=>r.yoy!=null&&r.yoy!==0).sort((a,b)=>(b.yoy||0)-(a.yoy||0)).slice(0,15);
+    c2items=[...rows].filter(r=>r.mom!=null&&r.mom!==0).sort((a,b)=>(b.mom||0)-(a.mom||0)).slice(0,15);
+    c1title="YoY 급등 TOP 15";c2title="MoM 급등 TOP 15";
+    valFn=(r,m)=>(r.exp[m]||0);fmtFn=v=>fn(v);
+  }
+  h+=`<div class="cg"><div class="cb"><h4>${c1title}</h4><canvas id="rk1"></canvas></div><div class="cb"><h4>${c2title}</h4><canvas id="rk2"></canvas></div></div>`;
   el.innerHTML=h;
   const rm=months.slice(-12);
   const mk=(id,items)=>{const ctx=document.getElementById(id);if(!ctx)return;
-    charts.push(new Chart(ctx,{type:"line",data:{labels:rm.map(fy),datasets:items.map((r,i)=>({label:`${r.name}(${r.hs})`,data:rm.map(m=>(r.exp[m]||0)),borderColor:CL[i%CL.length],borderWidth:1.5,tension:.3,pointRadius:1}))},options:{responsive:true,interaction:{mode:"index",intersect:false},plugins:{legend:{labels:{boxWidth:8,font:{size:9},color:"#c8d4e6"}}},scales:{y:{ticks:{callback:v=>fn(v),color:"#a4b2c8"},grid:{color:"rgba(255,255,255,.04)"}},x:{ticks:{color:"#8898b0"},grid:{display:false}}}}}))};
-  mk("rk1",yoyTop);mk("rk2",momTop);
+    charts.push(new Chart(ctx,{type:"line",data:{labels:rm.map(fy),datasets:items.map((r,i)=>({label:`${r.name}(${r.hs})`,data:rm.map(m=>valFn(r,m)),borderColor:CL[i%CL.length],borderWidth:1.5,tension:.3,pointRadius:1,spanGaps:true}))},options:{responsive:true,interaction:{mode:"index",intersect:false},plugins:{legend:{labels:{boxWidth:8,font:{size:9},color:"#c8d4e6"}},tooltip:{callbacks:{label:c=>c.dataset.label+": "+fmtFn(c.parsed.y)}}},scales:{y:{ticks:{callback:v=>fmtFn(v),color:"#a4b2c8"},grid:{color:"rgba(255,255,255,.04)"}},x:{ticks:{color:"#8898b0"},grid:{display:false}}}}}))};
+  mk("rk1",c1items);mk("rk2",c2items);
 }
 
 // ===== 국가/지역별 보기 =====
