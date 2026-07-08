@@ -1668,9 +1668,28 @@ function rConfirmed(el){
 }
 function rConfirmedCompany(el,c){
   const rows=c.rows||[];
+  // 원화 금액 → 조/억/만 (DART 재무 표시용)
+  const wKR=v=>{if(v==null)return"—";const a=Math.abs(v),s=v<0?"-":"";if(a>=1e12)return s+(a/1e12).toFixed(1)+"조";if(a>=1e8)return s+Math.round(a/1e8).toLocaleString()+"억";if(a>=1e4)return s+Math.round(a/1e4).toLocaleString()+"만";return s+Math.round(a).toLocaleString();};
   let h=`<div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;flex-wrap:wrap"><button class="cs-clr" onclick="confBack()">← 기업 목록</button><span style="font-size:18px;font-weight:800;font-family:'Noto Sans KR'">${c.name}</span>${c.preset?'<span style="background:rgba(232,168,48,.14);border:1px solid var(--am);color:var(--am);padding:3px 8px;border-radius:5px;font-size:10px">★ 사전지정국</span>':''}<span style="color:var(--t4);font-size:12px">${c.category}</span></div>`;
   const topShare=(c.has_ww&&c.ex_2026>0&&c.ex_2026_top!=null)?Math.round(c.ex_2026_top/c.ex_2026*100):null;
   h+=`<div style="color:var(--t4);font-size:11px;margin:0 0 14px;font-family:'Fira Code',monospace">HS ${c.hs_list.join(", ")} · ${c.sigungu_list.join(", ")} · 2026 누적 ${fn(c.ex_2026)}<span style="color:var(--t5)"> (전세계 전체${topShare!=null?`, 표시 주요국 ${fn(c.ex_2026_top)}·${topShare}%`:''})</span> · 2025 전체 ${fn(c.ex_2025)}</div>`;
+  // ===== DART 재무: 매출/영업이익 (있을 때만) =====
+  const finA=(c.financials&&c.financials.annual)||null;
+  if(finA){
+    const fy=Object.keys(finA).sort();
+    const lastY=fy[fy.length-1], prevY=fy.length>1?fy[fy.length-2]:null;
+    const lr=finA[lastY].rev, lo=finA[lastY].op;
+    const pr=prevY?finA[prevY].rev:null, po=prevY?finA[prevY].op:null;
+    const mrg=(lr&&lo!=null)?lo/lr*100:null;
+    const yoy=(a,b)=>(a!=null&&b!=null&&b!==0)?(a-b)/Math.abs(b)*100:null;
+    const rYoY=yoy(lr,pr), oYoY=yoy(lo,po);
+    const chip=v=>v==null?'<span style="color:var(--t4)">—</span>':`<span style="color:${v>=0?'var(--gn)':'var(--rd)'}">${v>=0?'▲':'▼'} ${Math.abs(v).toFixed(1)}%</span>`;
+    const kpi=(lab,val,sub)=>`<div style="background:var(--bg3);border:1px solid var(--bd);border-radius:6px;padding:8px 11px"><div style="font-size:9.5px;color:var(--t3)">${lab}</div><div class="mono" style="font-size:16px;font-weight:700;color:var(--t1);margin:1px 0">${val}</div><div class="mono" style="font-size:9.5px">${sub}</div></div>`;
+    const fin=c.financials;
+    h+=`<div class="cg"><div class="cb w"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:9px"><h4 style="margin:0">📈 재무실적 · 매출·영업이익 (원)</h4><div class="mono" style="font-size:10px;color:var(--t4)">DART ${fin.dart_name||c.name}${fin.stock_code?' · '+fin.stock_code:''}${fin.fs_div?' · '+(fin.fs_div==='CFS'?'연결':'개별'):''}</div></div>`;
+    h+=`<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:11px">${kpi(lastY+' 매출액',wKR(lr),'YoY '+chip(rYoY))}${kpi(lastY+' 영업이익',wKR(lo),'YoY '+chip(oYoY))}${kpi('영업이익률',mrg==null?'—':mrg.toFixed(1)+'%',lastY+' 기준')}</div>`;
+    h+=`<canvas id="cf_fin"></canvas></div></div>`;
+  }
   // ===== 월별 시계열 축 (최근 N개월, 'YYYY-MM') =====
   const wwM=c.ww_monthly||{}, wwY=c.ww_yearly||{}, useWW=!!c.has_ww;
   const mset=new Set();rows.forEach(r=>Object.keys(r.monthly||{}).forEach(k=>mset.add(k)));
@@ -1719,6 +1738,14 @@ function rConfirmedCompany(el,c){
   // 4) 연도별 추이 (X=월, 연도별 멀티라인) — 누적/월별 토글
   const c2=document.getElementById("cf_y");
   if(c2)charts.push(new Chart(c2,{type:"line",data:{labels:MN,datasets:ySets},options:{responsive:true,interaction:{mode:"index",intersect:false},plugins:{legend:{display:true,labels:{color:"#c8d4e6",font:{size:10},boxWidth:12}},tooltip:{callbacks:{label:c=>c.dataset.label+": $"+fn(c.parsed.y)}}},scales:{y:{ticks:{callback:v=>fn(v),color:"#a4b2c8"},grid:{color:"rgba(255,255,255,.04)"}},x:{ticks:{color:"#8898b0",font:{size:10}},grid:{display:false}}}}}));
+  // 5) DART 재무: 매출(막대, 좌축) + 영업이익(라인, 우축)
+  const cf=document.getElementById("cf_fin");
+  if(cf&&finA){const FY=Object.keys(finA).sort();
+    charts.push(new Chart(cf,{data:{labels:FY,datasets:[
+      {type:"bar",label:"매출액",data:FY.map(y=>finA[y].rev??null),yAxisID:"y",backgroundColor:"rgba(52,211,153,.45)",borderColor:"#34d399",borderWidth:1,borderRadius:3,order:2},
+      {type:"line",label:"영업이익",data:FY.map(y=>finA[y].op??null),yAxisID:"y1",borderColor:"#4d9fff",backgroundColor:"rgba(77,159,255,.15)",borderWidth:2,tension:.25,pointRadius:3,spanGaps:true,order:1}
+    ]},options:{responsive:true,interaction:{mode:"index",intersect:false},plugins:{legend:{display:true,labels:{color:"#c8d4e6",font:{size:10},boxWidth:12}},tooltip:{callbacks:{label:c=>c.dataset.label+": "+wKR(c.parsed.y)}}},scales:{y:{position:"left",ticks:{callback:wKR,color:"#34d399"},grid:{color:"rgba(255,255,255,.04)"}},y1:{position:"right",ticks:{callback:wKR,color:"#4d9fff"},grid:{display:false}},x:{ticks:{color:"#8898b0",font:{size:10}},grid:{display:false}}}}}));
+  }
 }
 
 (async function(){
