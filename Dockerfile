@@ -17,6 +17,8 @@ COPY confirmed_companies.json .
 
 # trade.db는 git에 두지 않고 빌드 시 trade_data_v2.json에서 생성 (149MB > GitHub 100MB 한도 회피)
 RUN python -m collector.migrate_json
+# 잠정치도 같은 trade.db에 prov_* 테이블로 적재 (정적 JSON은 폴백용으로 COPY 유지)
+RUN python -m collector.migrate_provisional
 
 EXPOSE 8000
 

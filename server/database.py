@@ -96,6 +96,43 @@ CREATE TABLE IF NOT EXISTS collection_log (
     collected_at TEXT NOT NULL,
     row_count    INTEGER DEFAULT 0
 );
+
+-- ─────────────────────────────────────────────────────────────
+-- 잠정치 (provisional) — 정적 provisional_data.json을 API 뒤로 통일
+--   원본 구조: {품목키: {h,d,u, s:{국가:{YYYYMM:{cut:{c,v,w,a}}}}}}
+--   c·a는 전 레코드 존재, v·w는 일부만 → 부재키는 NULL(0 채우기 금지)
+-- ─────────────────────────────────────────────────────────────
+-- 잠정치 품목 정의 (표시 순서 = sort_order)
+CREATE TABLE IF NOT EXISTS prov_items (
+    item_key   TEXT PRIMARY KEY,
+    h          TEXT NOT NULL DEFAULT '',
+    d          TEXT NOT NULL DEFAULT '',
+    u          TEXT NOT NULL DEFAULT '',
+    sort_order INTEGER DEFAULT 0
+);
+
+-- 잠정치 품목별 국가/구분 (섹션 버튼 순서 = sort_order)
+CREATE TABLE IF NOT EXISTS prov_countries (
+    item_key   TEXT NOT NULL,
+    country    TEXT NOT NULL,
+    sort_order INTEGER DEFAULT 0,
+    PRIMARY KEY (item_key, country)
+);
+
+-- 잠정치 시계열 (10/20/30일 누적). 값 컬럼은 nullable REAL: NULL=부재
+CREATE TABLE IF NOT EXISTS prov_data (
+    item_key TEXT NOT NULL,
+    country  TEXT NOT NULL,
+    ym       TEXT NOT NULL,
+    cut      TEXT NOT NULL,
+    c        REAL,
+    v        REAL,
+    w        REAL,
+    a        REAL,
+    PRIMARY KEY (item_key, country, ym, cut)
+);
+
+CREATE INDEX IF NOT EXISTS idx_prov_data_item ON prov_data(item_key);
 """
 
 

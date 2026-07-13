@@ -764,11 +764,18 @@ function rSheet(el, sn, prefixH) {
 
 // ===== INIT =====
 (async function(){
-  // Try loading external JSON files
+  // 데이터 로드: FastAPI(/api/provisional-data)를 먼저 시도하고,
+  // 실패하면 정적 provisional_data.json으로 폴백 (GitHub Pages 등 백엔드 없는 환경 대비)
   try {
-    const r = await fetch("provisional_data.json", {cache:"no-cache"});
+    const r = await fetch("/api/provisional-data", {cache:"no-cache"});
     if (r.ok) PD = await r.json();
   } catch(e) {}
+  if (!PD) {
+    try {
+      const r = await fetch("provisional_data.json", {cache:"no-cache"});
+      if (r.ok) PD = await r.json();
+    } catch(e) {}
+  }
 
   try {
     const r = await fetch("business_days.json", {cache:"no-cache"});

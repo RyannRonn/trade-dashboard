@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import BASE_DIR, DB_PATH
 from .builder import build_full_json
+from .provisional_builder import build_provisional_json
 from .database import init_db
 
 app = FastAPI(title="수출입 대시보드 API")
@@ -19,6 +20,7 @@ app.add_middleware(
 
 # 캐시: DB 파일 수정 시간 기준
 _cache = {"data": None, "mtime": 0}
+_prov_cache = {"data": None, "mtime": 0}
 
 
 @app.on_event("startup")
@@ -34,6 +36,17 @@ async def get_trade_data():
         _cache["data"] = build_full_json()
         _cache["mtime"] = db_mtime
     return JSONResponse(content=_cache["data"])
+
+
+@app.get("/api/provisional-data")
+async def get_provisional_data():
+    """잠정치: provisional.html이 기대하는 {품목:{h,d,u,s}} 구조 반환.
+    정적 /provisional_data.json 과 semantic 동치 (프론트는 이걸 먼저 시도)."""
+    db_mtime = os.path.getmtime(DB_PATH) if os.path.exists(DB_PATH) else 0
+    if _prov_cache["data"] is None or db_mtime > _prov_cache["mtime"]:
+        _prov_cache["data"] = build_provisional_json()
+        _prov_cache["mtime"] = db_mtime
+    return JSONResponse(content=_prov_cache["data"])
 
 
 @app.get("/api/health")
