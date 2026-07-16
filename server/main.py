@@ -5,7 +5,6 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import BASE_DIR, DB_PATH
-from .builder import build_full_json
 from .provisional_builder import build_provisional_json
 from .database import init_db
 
@@ -18,8 +17,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 캐시: DB 파일 수정 시간 기준
-_cache = {"data": None, "mtime": 0}
+# 캐시: DB 파일 수정 시간 기준 (잠정치용 — 확정치는 정적 파일 스트리밍)
 _prov_cache = {"data": None, "mtime": 0}
 
 
@@ -30,12 +28,14 @@ async def startup():
 
 @app.get("/api/trade-data")
 async def get_trade_data():
-    """trade.html이 기대하는 완전한 JSON 구조 반환"""
-    db_mtime = os.path.getmtime(DB_PATH) if os.path.exists(DB_PATH) else 0
-    if _cache["data"] is None or db_mtime > _cache["mtime"]:
-        _cache["data"] = build_full_json()
-        _cache["mtime"] = db_mtime
-    return JSONResponse(content=_cache["data"])
+    """trade.html이 기대하는 완전한 JSON 구조 반환.
+
+    종전엔 builder로 DB→dict 재조립 후 인메모리 직렬화(53MB+)했는데,
+    무료 티어 RAM(512MB)에서 regions 데이터 증가로 OOM → 502가 남.
+    DB는 배포 시점에 trade_data_v2.json에서 생성돼 내용이 항상 동일하므로
+    정적 파일을 스트리밍(FileResponse)하는 것으로 대체 — 메모리 사용 수 MB."""
+    return FileResponse(os.path.join(BASE_DIR, "trade_data_v2.json"),
+                        media_type="application/json")
 
 
 @app.get("/api/provisional-data")
