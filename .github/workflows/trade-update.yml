@@ -13,8 +13,10 @@ name: 📊 수출입 데이터 자동 업데이트
 
 on:
   schedule:
-    # 매월 15일 오전 9시 KST (= UTC 00:00)
-    - cron: '0 0 15 * *'
+    # 매월 15일 오전 11시 KST (= UTC 02:00)
+    # 확정치는 15일 오전 10시경 공개되므로 09:00 실행 시 신월을 놓침
+    # (2026-07-15엔 GitHub cron 지연 덕에 11:02 실행돼 우연히 수집 성공)
+    - cron: '0 2 15 * *'
   workflow_dispatch:  # 수동 실행도 가능
 
 jobs:
@@ -47,10 +49,29 @@ jobs:
         API_KEY: ${{ secrets.DATA_GO_KR_API_KEY }}
       run: python collect_korea_total.py
 
+    # 전용 수집 5종 — customs_trade_v2가 못 만드는 데이터:
+    # ELK/BTX/HFS(가짜 HS코드라 자동수집 불가) 신월 + 화장품/미용의료 sub_items·중량.
+    # 이게 빠져 있어서 매월 "6월치 없음/세부항목 소실"이 재발했음 (2026-07-16 편입)
+    - name: 🔌 전력/보톡스/건기식/화장품/미용의료 수집
+      env:
+        API_KEY: ${{ secrets.DATA_GO_KR_API_KEY }}
+      run: |
+        python collect_electric.py
+        python collect_botox.py
+        python collect_hfs.py
+        python collect_cosmetics.py
+        python collect_medbeauty.py
+
     - name: 📈 ranking_6d 증분 수집 (전 5,465 HS6)
       env:
         API_KEY: ${{ secrets.DATA_GO_KR_API_KEY }}
       run: python collect_ranking.py
+
+    # DEMO 재임베드 — customs_trade_v2가 생성한 trade.html의 DEMO.total은
+    # 16품목 부분합(최근 수집월만)이라 틀림. collect_korea_total이 교정한
+    # 최종 JSON으로 다시 임베드해야 DEMO 폴백에서도 전체 수출입이 정확함.
+    - name: 🎨 DEMO 데이터 동기화 (total 교정 반영)
+      run: python sync_demo.py
 
     - name: 🗄️ DB 동기화
       run: python -m collector.migrate_json

@@ -75,6 +75,15 @@ async def provisional_data():
                         media_type="application/json")
 
 
+@app.get("/trade_data_v2.json")
+async def trade_data_json():
+    """확정치 전체 JSON 정적 서빙 — trade.html의 폴백 2단.
+    /api/trade-data가 메모리 부족(53MB 인메모리 직렬화)으로 502일 때
+    이 라우트가 없으면 DEMO 임베드로 떨어져 최신 total이 틀리게 보임."""
+    return FileResponse(os.path.join(BASE_DIR, "trade_data_v2.json"),
+                        media_type="application/json")
+
+
 @app.get("/business_days.json")
 async def business_days():
     return FileResponse(os.path.join(BASE_DIR, "business_days.json"),

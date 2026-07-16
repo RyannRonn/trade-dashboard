@@ -141,7 +141,7 @@ def main():
     if "9018" not in data["items"]:
         print("9018 항목이 없으므로 nitemtrade로 전체 데이터 먼저 수집...")
         from customs_trade_v2 import collect_nitemtrade
-        total_exp, total_imp, countries = collect_nitemtrade("9018", API_KEY, date_ranges, WANT_COUNTRIES)
+        total_exp, total_imp, countries, _item_wgt = collect_nitemtrade("9018", API_KEY, date_ranges, WANT_COUNTRIES)
         data["items"]["9018"] = {
             "name": "미용의료기기",
             "total_exp": total_exp,

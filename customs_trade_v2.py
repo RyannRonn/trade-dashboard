@@ -337,6 +337,7 @@ def collect_nitemtrade(hs, api_key, date_ranges, want_countries):
     total_imp = {}
     country_exp = defaultdict(lambda: defaultdict(int))
     country_imp = defaultdict(lambda: defaultdict(int))
+    country_wgt = defaultdict(lambda: defaultdict(int))  # 중량(kg) — 단가 계산용
 
     for start, end in date_ranges:
         rows = api_call_xml("/nitemtrade/getNitemtradeList",
@@ -355,6 +356,7 @@ def collect_nitemtrade(hs, api_key, date_ranges, want_countries):
                 # 국가별 데이터 (6자리 코드별이므로 국가로 합산)
                 country_exp[stat_cd][ym] += exp
                 country_imp[stat_cd][ym] += imp
+                country_wgt[stat_cd][ym] += safe_int(r.get("expWgt", 0))
             # 총계는 국가별 합산으로 계산 (총계 행은 기간 전체 합산이라 월별 아님)
 
         time.sleep(REQUEST_DELAY)
@@ -363,9 +365,11 @@ def collect_nitemtrade(hs, api_key, date_ranges, want_countries):
     all_months = set()
     for cd in country_exp:
         all_months.update(country_exp[cd].keys())
+    total_wgt = {}
     for ym in all_months:
         total_exp[ym] = sum(country_exp[cd].get(ym, 0) for cd in country_exp)
         total_imp[ym] = sum(country_imp[cd].get(ym, 0) for cd in country_imp)
+        total_wgt[ym] = sum(country_wgt[cd].get(ym, 0) for cd in country_exp)
 
     # want_countries에 해당하는 국가만 추출
     countries = {}
@@ -375,8 +379,10 @@ def collect_nitemtrade(hs, api_key, date_ranges, want_countries):
                 "name": COUNTRY_NAMES.get(cd, cd),
                 "exp": dict(country_exp[cd])
             }
+            if any(v > 0 for v in country_wgt[cd].values()):
+                countries[cd]["wgt"] = dict(country_wgt[cd])
 
-    return total_exp, total_imp, countries
+    return total_exp, total_imp, countries, total_wgt
 
 
 def get_sido_codes():
@@ -494,7 +500,7 @@ def collect_data(api_key):
 
         # 1) nitemtrade: 품목 총계 + 국가별 동시 수집
         print(f"  품목+국가별 데이터 수집...")
-        total_exp, total_imp, countries = collect_nitemtrade(
+        total_exp, total_imp, countries, item_wgt = collect_nitemtrade(
             hs, api_key, item_ranges, cfg.get("countries", [])
         )
 
@@ -505,6 +511,9 @@ def collect_data(api_key):
             "countries": countries,
             "regions": {}
         }
+        # 중량(kg) — 값이 있는 품목만 (단가 = 수출액 ÷ 중량)
+        if any(v > 0 for v in item_wgt.values()):
+            item["total_wgt"] = item_wgt
 
         # 총계에 합산
         for ym in total_exp:
